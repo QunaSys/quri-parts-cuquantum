@@ -1,4 +1,4 @@
-# QURI Parts Braket
+# QURI Parts cuQuantum
 
 QURI Parts cuQuantum is a support package for using NVIDIA cuQuantum SDK with QURI Parts.
 You can accelerate your code written in QURI Parts using GPU through NVIDIA cuQuantum.
