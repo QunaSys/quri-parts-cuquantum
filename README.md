@@ -8,10 +8,15 @@ You can accelerate your code written in QURI Parts using GPU through NVIDIA cuQu
 [QURI Parts Documentation](https://quri-parts.qunasys.com)
 
 ## Installation
-
+Run
 ```
-pip install quri-parts-cuquantum
+python -m pip install git+https://github.com/QunaSys/quri-parts-cuquantum.git
 ```
+or clone this repository and run
+```
+pip install .
+```
+in the cloned repository.
 
 ## License
 
