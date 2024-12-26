@@ -12,8 +12,11 @@ import pytest
 
 from quri_parts.circuit import QuantumCircuit
 from quri_parts.cuquantum.custatevec.simulator import evaluate_state_to_vector
-from quri_parts.qulacs.simulator import evaluate_state_to_vector as qulacs_evaluate_state_to_vector
+from quri_parts.qulacs.simulator import (
+    evaluate_state_to_vector as qulacs_evaluate_state_to_vector,
+)
 from quri_parts.core.state import quantum_state
+
 
 @pytest.mark.parametrize("qubits", [4, 12])
 def test_evaluate_state_to_vector(qubits: int) -> None:
@@ -28,6 +31,7 @@ def test_evaluate_state_to_vector(qubits: int) -> None:
 
     state = quantum_state(n_qubits=qubits, circuit=circuit)
     vector = evaluate_state_to_vector(state).vector
+    print(vector)
     target_state = quantum_state(n_qubits=qubits, circuit=circuit)
     target_vector = qulacs_evaluate_state_to_vector(target_state).vector
 
