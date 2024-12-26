@@ -31,7 +31,6 @@ def test_evaluate_state_to_vector(qubits: int) -> None:
 
     state = quantum_state(n_qubits=qubits, circuit=circuit)
     vector = evaluate_state_to_vector(state).vector
-    print(vector)
     target_state = quantum_state(n_qubits=qubits, circuit=circuit)
     target_vector = qulacs_evaluate_state_to_vector(target_state).vector
 
