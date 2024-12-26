@@ -46,8 +46,12 @@ from quri_parts.core.state import (
 )
 
 from . import PRECISIONS, Precision
-from .circuit import gate_array
+from .circuit import gate_array, gate_map
 from .operator import convert_operator
+
+gates_to_cache = set()
+for gate_name in gate_map.keys():
+    gates_to_cache.add(gate_name)
 
 
 class _Estimate(NamedTuple):
@@ -102,11 +106,20 @@ def _estimate(
     )
     circuit = transpiler(state.circuit)
 
+    mat_dict = {}
+
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
-        mat = cp.array(gate_array(g, dtype=precision))
+        if g.name in gates_to_cache:
+            if g.name not in mat_dict:
+                mat = cp.array(gate_array(g), dtype=precision)
+                mat_dict[g.name] = mat
+            else:
+                mat = mat_dict[g.name]
+        else:
+            mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
 
         workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(
@@ -176,12 +189,15 @@ def create_cuquantum_vector_estimator(
 
 def create_cuquantum_general_vector_estimator(
     precision: Precision = "complex128",
-) -> GeneralQuantumEstimator[CuQuantumStateT, CuQuantumParametricStateT,]:
+) -> GeneralQuantumEstimator[
+    CuQuantumStateT,
+    CuQuantumParametricStateT,
+]:
     estimator = create_cuquantum_vector_estimator(precision)
     concurrent_estimator = create_concurrent_estimator_from_estimator(estimator)
-    parametric_estimator: ParametricQuantumEstimator[
-        CuQuantumParametricStateT
-    ] = create_parametric_estimator_from_concurrent_estimator(concurrent_estimator)
+    parametric_estimator: ParametricQuantumEstimator[CuQuantumParametricStateT] = (
+        create_parametric_estimator_from_concurrent_estimator(concurrent_estimator)
+    )
     concurrent_parametric_estimator: ConcurrentParametricQuantumEstimator[
         CuQuantumParametricStateT
     ] = create_concurrent_parametric_estimator_from_concurrent_estimator(
