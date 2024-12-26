@@ -19,16 +19,15 @@ try:
 except ImportError:
     cuquantum = None
 import numpy as np
-
-from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 from quri_parts.circuit.transpile import (
     ParallelDecomposer,
     PauliDecomposeTranspiler,
     PauliRotationDecomposeTranspiler,
 )
+from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 
+from . import PRECISIONS, Precision
 from .circuit import gate_array
-from . import Precision, PRECISIONS
 
 
 def evaluate_state_to_vector(

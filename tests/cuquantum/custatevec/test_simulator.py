@@ -9,13 +9,13 @@
 # limitations under the License.
 
 import pytest
-
 from quri_parts.circuit import QuantumCircuit
-from quri_parts.cuquantum.custatevec.simulator import evaluate_state_to_vector
+from quri_parts.core.state import quantum_state
 from quri_parts.qulacs.simulator import (
     evaluate_state_to_vector as qulacs_evaluate_state_to_vector,
 )
-from quri_parts.core.state import quantum_state
+
+from quri_parts.cuquantum.custatevec.simulator import evaluate_state_to_vector
 
 
 @pytest.mark.parametrize("qubits", [4, 12])
