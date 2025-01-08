@@ -69,7 +69,7 @@ def evaluate_state_to_vector(
     for g in circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
-        mat = cp.array(gate_array(g))
+        mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
 
         workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
