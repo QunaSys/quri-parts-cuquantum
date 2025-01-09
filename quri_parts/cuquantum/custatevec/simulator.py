@@ -27,7 +27,11 @@ from quri_parts.circuit.transpile import (
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 
 from . import PRECISIONS, Precision
-from .circuit import gate_array
+from .circuit import gate_array, gate_map
+
+gates_to_cache = set()
+for gate_name in gate_map.keys():
+    gates_to_cache.add(gate_name)
 
 
 def evaluate_state_to_vector(
@@ -65,11 +69,20 @@ def evaluate_state_to_vector(
     )
     circuit = transpiler(circuit)
 
+    mat_dict = {}
+
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
-        mat = cp.array(gate_array(g), dtype=precision)
+        if g.name in gates_to_cache:
+            if g.name not in mat_dict:
+                mat = cp.array(gate_array(g), dtype=precision)
+                mat_dict[g.name] = mat
+            else:
+                mat = mat_dict[g.name]
+        else:
+            mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
 
         workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
