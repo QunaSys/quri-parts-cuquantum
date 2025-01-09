@@ -29,8 +29,8 @@ from quri_parts.circuit.transpile import (
 )
 from quri_parts.core.sampling import ConcurrentSampler, MeasurementCounts, Sampler
 
+from . import PRECISIONS, Precision
 from .circuit import gate_array, gate_map
-from . import Precision, PRECISIONS
 
 gates_to_cache = set()
 for gate_name in gate_map.keys():

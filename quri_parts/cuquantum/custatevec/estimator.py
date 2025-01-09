@@ -189,15 +189,12 @@ def create_cuquantum_vector_estimator(
 
 def create_cuquantum_general_vector_estimator(
     precision: Precision = "complex128",
-) -> GeneralQuantumEstimator[
-    CuQuantumStateT,
-    CuQuantumParametricStateT,
-]:
+) -> GeneralQuantumEstimator[CuQuantumStateT, CuQuantumParametricStateT,]:
     estimator = create_cuquantum_vector_estimator(precision)
     concurrent_estimator = create_concurrent_estimator_from_estimator(estimator)
-    parametric_estimator: ParametricQuantumEstimator[CuQuantumParametricStateT] = (
-        create_parametric_estimator_from_concurrent_estimator(concurrent_estimator)
-    )
+    parametric_estimator: ParametricQuantumEstimator[
+        CuQuantumParametricStateT
+    ] = create_parametric_estimator_from_concurrent_estimator(concurrent_estimator)
     concurrent_parametric_estimator: ConcurrentParametricQuantumEstimator[
         CuQuantumParametricStateT
     ] = create_concurrent_parametric_estimator_from_concurrent_estimator(
