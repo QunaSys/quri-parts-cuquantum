@@ -19,19 +19,35 @@ try:
 except ImportError:
     cuquantum = None
 import numpy as np
-
+from quri_parts.circuit.transpile import (
+    ParallelDecomposer,
+    PauliDecomposeTranspiler,
+    PauliRotationDecomposeTranspiler,
+)
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 
+from . import PRECISIONS, Precision
 from .circuit import gate_array
 
 
 def evaluate_state_to_vector(
-    state: Union[CircuitQuantumState, QuantumStateVector]
+    state: Union[CircuitQuantumState, QuantumStateVector],
+    precision: Precision = "complex128",
 ) -> QuantumStateVector:
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
     if cuquantum is None:
         raise RuntimeError("cuQuantum is not installed.")
+
+    if precision not in PRECISIONS:
+        raise ValueError(f"Invalid precision: {precision}")
+
+    if precision == "complex64":
+        cuda_d_type = cuquantum.cudaDataType.CUDA_C_32F
+        cuda_c_type = cuquantum.ComputeType.COMPUTE_32F
+    else:
+        cuda_d_type = cuquantum.cudaDataType.CUDA_C_64F
+        cuda_c_type = cuquantum.ComputeType.COMPUTE_64F
 
     qubit_count = state.qubit_count
 
@@ -41,26 +57,32 @@ def evaluate_state_to_vector(
         sv = np.zeros(2**qubit_count, dtype=np.complex64)
         sv[0] = 1.0
 
-    sv = cp.array(sv)
+    sv = cp.array(sv, dtype=precision)
+    circuit = state.circuit
+
+    transpiler = ParallelDecomposer(
+        [PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]
+    )
+    circuit = transpiler(circuit)
 
     handle = cuquantum.custatevec.create()
-    for g in state.circuit.gates:
+    for g in circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
-        mat = cp.array(gate_array(g))
+        mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
 
         workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
             handle,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuda_d_type,
             qubit_count,
             mat_ptr,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
             len(targets),
             len(controls),
-            cuquantum.ComputeType.COMPUTE_32F,
+            cuda_c_type,
         )
 
         # check the size of external workspace
@@ -74,10 +96,10 @@ def evaluate_state_to_vector(
         cuquantum.custatevec.apply_matrix(
             handle,
             sv.data.ptr,  # type: ignore
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuda_d_type,
             qubit_count,
             mat_ptr,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
             targets.ctypes.data,
@@ -85,7 +107,7 @@ def evaluate_state_to_vector(
             controls.ctypes.data,
             0,
             len(controls),
-            cuquantum.ComputeType.COMPUTE_32F,
+            cuda_c_type,
             workspace_ptr,
             workspaceSize,
         )
