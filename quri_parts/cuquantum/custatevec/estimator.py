@@ -48,9 +48,13 @@ from quri_parts.core.state import (
 from quri_parts.circuit import QuantumCircuit
 
 from . import PRECISIONS, Precision
-from .circuit import gate_array
+from .circuit import gate_array, gate_map
 from .operator import convert_operator
 from .sampler import _update_state
+
+gates_to_cache = set()
+for gate_name in gate_map.keys():
+    gates_to_cache.add(gate_name)
 
 
 class _Estimate(NamedTuple):
