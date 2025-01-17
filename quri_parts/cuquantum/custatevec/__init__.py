@@ -9,6 +9,7 @@
 # limitations under the License.
 
 from typing import Literal
+
 from typing_extensions import TypeAlias
 
 Precision: TypeAlias = Literal["complex64", "complex128"]
