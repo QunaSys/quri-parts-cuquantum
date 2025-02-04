@@ -88,11 +88,41 @@ def _sample(
     rot_mat_dict = {}
     for rot_gate in rot_gate_to_cache:
         rot_mat_dict[rot_gate] = {}
+    qubits_cache = {}
+    qubits_ptr_cache = {}
+    # controls_cache = {}
 
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
+        len_targets = len(g.target_indices)
+        len_controls = len(g.control_indices)
+        if len_targets <= 2:
+            if g.target_indices not in qubits_cache:
+                qubits_cache[g.target_indices] = np.array(
+                    g.target_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.target_indices] = qubits_cache[
+                    g.target_indices
+                ].ctypes.data
+            targets = qubits_cache[g.target_indices]
+            targets_ptr = qubits_ptr_cache[g.target_indices]
+        else:
+            targets = np.array(g.target_indices, dtype=np.int32)
+            targets_ptr = targets.ctypes.data
+        if len_controls <= 2:
+            if g.control_indices not in qubits_cache:
+                qubits_cache[g.control_indices] = np.array(
+                    g.control_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.control_indices] = qubits_cache[
+                    g.control_indices
+                ].ctypes.data
+            controls = qubits_cache[g.control_indices]
+            controls_ptr = qubits_ptr_cache[g.control_indices]
+        else:
+            controls = np.array(g.control_indices, dtype=np.int32)
+            controls_ptr = controls.ctypes.data
+
         if g.name in gates_to_cache:
             if g.name not in mat_dict:
                 mat = cp.array(gate_array(g), dtype=precision)
@@ -117,8 +147,8 @@ def _sample(
             cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
-            len(targets),
-            len(controls),
+            len_targets,
+            len_controls,
             cuda_c_type,
         )
 
@@ -139,11 +169,11 @@ def _sample(
             cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
+            targets_ptr,
+            len_targets,
+            controls_ptr,
             0,
-            len(controls),
+            len_controls,
             cuda_c_type,
             workspace_ptr,
             workspace_size,
