@@ -69,7 +69,9 @@ def _sample(
     print_VRAM_usage()
 
     qubit_count = circuit.qubit_count
-    sv = cp.array([1.0] + [0.0] * (2**qubit_count - 1), dtype=precision)
+    # sv = cp.array([1.0] + [0.0] * (2**qubit_count - 1), dtype=precision)
+    sv = cp.zeros(2**qubit_count, dtype=precision)
+    sv[0] = 1.0
     res_bits = np.empty((shots,), dtype=np.int64)
     bit_ordering = np.arange(qubit_count, dtype=np.int32)
 
