@@ -82,6 +82,10 @@ def _sample(
     circuit = transpiler(circuit)
 
     mat_dict = {}
+    rot_gate_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
+    rot_mat_dict = {}
+    for rot_gate in rot_gate_to_cache:
+        rot_mat_dict[rot_gate] = {}
 
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
@@ -93,6 +97,12 @@ def _sample(
                 mat_dict[g.name] = mat
             else:
                 mat = mat_dict[g.name]
+        elif g.name in rot_gate_to_cache:
+            if g.params not in rot_mat_dict[g.name]:
+                mat = cp.array(gate_array(g), dtype=precision)
+                rot_mat_dict[g.name][g.params] = mat
+            else:
+                mat = rot_mat_dict[g.name][g.params]
         else:
             mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
