@@ -37,14 +37,6 @@ for gate_name in gate_map.keys():
     gates_to_cache.add(gate_name)
 
 
-def print_VRAM_usage():
-    mem_info = cp.cuda.runtime.memGetInfo()
-    free_mem, total_mem = mem_info
-
-    print(f"Free memory: {free_mem / (1024**2):.2f} MB")
-    print(f"Total memory: {total_mem / (1024**2):.2f} MB")
-
-
 def _sample(
     circuit: NonParametricQuantumCircuit,
     shots: int,
@@ -65,8 +57,6 @@ def _sample(
     else:
         cuda_d_type = cuquantum.cudaDataType.CUDA_C_64F
         cuda_c_type = cuquantum.ComputeType.COMPUTE_64F
-
-    print_VRAM_usage()
 
     qubit_count = circuit.qubit_count
     # sv = cp.array([1.0] + [0.0] * (2**qubit_count - 1), dtype=precision)
@@ -90,7 +80,6 @@ def _sample(
         rot_mat_dict[rot_gate] = {}
     qubits_cache = {}
     qubits_ptr_cache = {}
-    # controls_cache = {}
 
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
@@ -203,17 +192,12 @@ def _sample(
         shots,
         cuquantum.custatevec.SamplerOutput.RANDNUM_ORDER,
     )
-    print_VRAM_usage()
-    RZ_cache_size = sum([mat.nbytes for mat in rot_mat_dict["RZ"].values()])
-    print(f"{RZ_cache_size / (1024**2)} MB")
 
     # destroy sampler
     cuquantum.custatevec.sampler_destroy(sampler)
 
     # destroy handle
     cuquantum.custatevec.destroy(handle)
-
-    print_VRAM_usage()
 
     return Counter(res_bits)
 
