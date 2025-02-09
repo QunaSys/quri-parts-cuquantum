@@ -114,18 +114,18 @@ def _sample(
 
         if g.name in gates_to_cache:
             if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
+                mat = gate_array(g, dtype=precision)
                 mat_dict[g.name] = mat
             else:
                 mat = mat_dict[g.name]
         elif g.name in rot_gate_to_cache:
             if g.params not in rot_mat_dict[g.name]:
-                mat = cp.array(gate_array(g), dtype=precision)
+                mat = gate_array(g, dtype=precision)
                 rot_mat_dict[g.name][g.params] = mat
             else:
                 mat = rot_mat_dict[g.name][g.params]
         else:
-            mat = cp.array(gate_array(g), dtype=precision)
+            mat = gate_array(g, dtype=precision)
         mat_ptr = mat.data.ptr
 
         workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(

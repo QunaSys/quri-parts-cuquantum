@@ -10,6 +10,10 @@
 
 from typing import Optional
 
+try:
+    import cupy as cp
+except ImportError:
+    raise RuntimeError("CuPy is not installed.")
 import numpy as np
 import numpy.typing as npt
 from quri_parts.circuit import NonParametricQuantumCircuit, QuantumGate, gate_names
@@ -54,6 +58,91 @@ gate_map: dict[GateNameType, npt.NDArray] = {
     gate_names.TOFFOLI: np.array([0.0, 1.0, 1.0, 0.0]),
 }
 
+cuda_code = r"""
+__constant__ double RX_LUT[4] = {1, 0, 0, 1};
+__constant__ double RY_LUT[4] = {1, 0, 0, 1};
+__constant__ double RZ_LUT[4] = {1, 0, 0, 1};
+__constant__ double M_SQRT1_2 = 0.7071067811865476;
+
+extern "C" __global__
+void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double param2, double param3) {
+    int i = threadIdx.x;
+    double cost = cos(param1 / 2.0);
+    double sint = sin(param1 / 2.0);
+
+    if (gate_type == 0) { // RX
+        mat[i].x = cost * RX_LUT[i];
+        mat[i].y = -sint * (1 - RX_LUT[i]);
+    } else if (gate_type == 1) { // RY
+        mat[i].x = cost * RY_LUT[i];
+        mat[i].y = sint * (1 - RY_LUT[i]);
+    } else if (gate_type == 2) { // RZ
+        mat[i].x = cost;
+        mat[i].y = -sint * (i == 0 ? 1 : (i == 3 ? -1 : 0));
+    } else if (gate_type == 3) { // U1 (Phase gate)
+        if (i == 0 || i == 3) {
+            mat[i].x = cos(param1);
+            mat[i].y = sin(param1);
+        } else {
+            mat[i].x = 0;
+            mat[i].y = 0;
+        }
+    } else if (gate_type == 4) { // U2
+        if (i == 0) {
+            mat[i].x = M_SQRT1_2;  // 1/sqrt(2)
+            mat[i].y = 0;
+        } else if (i == 1) {
+            mat[i].x = -M_SQRT1_2 * cos(param2);
+            mat[i].y = -M_SQRT1_2 * sin(param2);
+        } else if (i == 2) {
+            mat[i].x = M_SQRT1_2 * cos(param1);
+            mat[i].y = M_SQRT1_2 * sin(param1);
+        } else {
+            mat[i].x = M_SQRT1_2 * cos(param1 + param2);
+            mat[i].y = M_SQRT1_2 * sin(param1 + param2);
+        }
+    } else if (gate_type == 5) { // U3
+        if (i == 0) {
+            mat[i].x = cos(param1 / 2.0);
+            mat[i].y = 0;
+        } else if (i == 1) {
+            mat[i].x = -sin(param1 / 2.0) * cos(param3);
+            mat[i].y = -sin(param1 / 2.0) * sin(param3);
+        } else if (i == 2) {
+            mat[i].x = sin(param1 / 2.0) * cos(param2);
+            mat[i].y = sin(param1 / 2.0) * sin(param2);
+        } else {
+            mat[i].x = cos(param1 / 2.0) * cos(param2 + param3);
+            mat[i].y = cos(param1 / 2.0) * sin(param2 + param3);
+        }
+    }
+}
+"""
+
+
+initialize_kernel = cp.RawKernel(cuda_code, "initialize_gate_matrix")
+
+
+def fast_gate_array(gate_name, params):
+    mat = cp.empty(4, dtype=cp.complex128)
+
+    gate_types = {"RX": 0, "RY": 1, "RZ": 2, "U1": 3, "U2": 4, "U3": 5}
+
+    gate_type = gate_types.get(gate_name, -1)
+    if gate_type == -1:
+        raise ValueError(f"Unsupported gate: {gate_name}")
+
+    if gate_type <= 3:
+        initialize_kernel((1,), (4,), (mat, gate_type, params[0], 0.0, 0.0))
+    elif gate_type <= 4:
+        initialize_kernel((1,), (4,), (mat, gate_type, params[0], params[1], 0.0))
+    else:
+        initialize_kernel((1,), (4,), (mat, gate_type, params[0], params[1], params[2]))
+    return mat
+
+
+rot_gates = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
+
 
 def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[npt.NDArray]:
     """Returns the array representation of given gate.
@@ -62,68 +151,10 @@ def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[npt.NDA
     supported.
     """
     if gate.name in gate_map and is_gate_name(gate.name):
-        return gate_map[gate.name].astype(dtype)
+        return cp.array(gate_map[gate.name], dtype=dtype)
     p = gate.params
-    if gate.name == "RX":
-        return np.array(
-            [
-                np.cos(p[0] / 2),
-                -1.0j * np.sin(p[0] / 2),
-                -1.0j * np.sin(p[0] / 2),
-                np.cos(p[0] / 2),
-            ],
-            dtype=dtype,
-        )
-    elif gate.name == "RY":
-        return np.array(
-            [
-                np.cos(p[0] / 2),
-                -np.sin(p[0] / 2),
-                np.sin(p[0] / 2),
-                np.cos(p[0] / 2),
-            ],
-            dtype=dtype,
-        )
-    elif gate.name == "RZ":
-        return np.array(
-            [
-                np.exp(-1.0j * p[0] / 2),
-                0.0,
-                0.0,
-                np.exp(1.0j * p[0] / 2),
-            ],
-            dtype=dtype,
-        )
-    elif gate.name == "U1":
-        return np.array(
-            [
-                1.0,
-                0.0,
-                0.0,
-                np.exp(1.0j * p[0]),
-            ],
-            dtype=dtype,
-        )
-    elif gate.name == "U2":
-        return np.array(
-            [
-                1.0 / np.sqrt(2),
-                -np.exp(1.0j * p[1]) / np.sqrt(2),
-                np.exp(1.0j * p[0]) / np.sqrt(2),
-                np.exp(1.0j * (p[0] + p[1])) / np.sqrt(2),
-            ],
-            dtype=dtype,
-        )
-    elif gate.name == "U3":
-        return np.array(
-            [
-                np.cos(p[0] / 2),
-                -np.exp(1.0j * p[2]) * np.sin(p[0] / 2),
-                np.exp(1.0j * p[1]) * np.sin(p[0] / 2),
-                np.exp(1.0j * (p[1] + p[2])) * np.cos(p[0] / 2),
-            ],
-            dtype=dtype,
-        )
+    if gate.name in rot_gates:
+        return fast_gate_array(gate.name, p)
     elif gate.name == "UnitaryMatrix":
         return np.array(gate.unitary_matrix, dtype=dtype).flatten()
     elif gate.name == "Measurement":
