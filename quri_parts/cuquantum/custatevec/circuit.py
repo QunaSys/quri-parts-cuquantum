@@ -8,7 +8,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Sequence
 
 try:
     import cupy as cp
@@ -16,7 +16,7 @@ except ImportError:
     raise RuntimeError("CuPy is not installed.")
 import numpy as np
 import numpy.typing as npt
-from quri_parts.circuit import NonParametricQuantumCircuit, QuantumGate, gate_names
+from quri_parts.circuit import QuantumGate, gate_names
 from quri_parts.circuit.gate_names import GateNameType, is_gate_name
 
 gate_map: dict[GateNameType, npt.NDArray] = {
@@ -123,7 +123,7 @@ void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double p
 initialize_kernel = cp.RawKernel(cuda_code, "initialize_gate_matrix")
 
 
-def fast_gate_array(gate_name, params):
+def fast_gate_array(gate_name: str, params: Sequence[float]) -> cp.ndarray:
     mat = cp.empty(4, dtype=cp.complex128)
 
     gate_types = {"RX": 0, "RY": 1, "RZ": 2, "U1": 3, "U2": 4, "U3": 5}
@@ -144,7 +144,7 @@ def fast_gate_array(gate_name, params):
 rot_gates = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
 
 
-def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[npt.NDArray]:
+def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[cp.ndarray]:
     """Returns the array representation of given gate.
 
     Currently Pauli, PauliRotation, and measurement gates are not
@@ -156,7 +156,9 @@ def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[npt.NDA
     if gate.name in rot_gates:
         return fast_gate_array(gate.name, p)
     elif gate.name == "UnitaryMatrix":
-        return np.array(gate.unitary_matrix, dtype=dtype).flatten()
+        return cp.array(
+            np.array(gate.unitary_matrix, dtype=dtype).flatten(), dtype=dtype
+        )
     elif gate.name == "Measurement":
         return None
     raise ValueError(f"{gate.name} gate is not supported.")
