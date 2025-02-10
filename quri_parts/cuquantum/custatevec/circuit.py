@@ -60,7 +60,8 @@ gate_map: dict[GateNameType, npt.NDArray] = {
 
 cuda_code = r"""
 __constant__ double RX_LUT[4] = {1, 0, 0, 1};
-__constant__ double RY_LUT[4] = {1, 0, 0, 1};
+__constant__ double RY_COS_LUT[4] = {1, 0, 0, 1};
+__constant__ double RY_SIN_LUT[4] = {0, -1, 1, 0};
 __constant__ double RZ_LUT[4] = {1, 0, 0, 1};
 __constant__ double M_SQRT1_2 = 0.7071067811865476;
 
@@ -74,13 +75,16 @@ void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double p
         mat[i].x = cost * RX_LUT[i];
         mat[i].y = -sint * (1 - RX_LUT[i]);
     } else if (gate_type == 1) { // RY
-        mat[i].x = cost * RY_LUT[i];
-        mat[i].y = sint * (1 - RY_LUT[i]);
+        mat[i].x = cost * RY_COS_LUT[i] + sint * RY_SIN_LUT[i];
+        mat[i].y = 0;
     } else if (gate_type == 2) { // RZ
-        mat[i].x = cost;
+        mat[i].x = cost * RZ_LUT[i];
         mat[i].y = -sint * (i == 0 ? 1 : (i == 3 ? -1 : 0));
     } else if (gate_type == 3) { // U1 (Phase gate)
-        if (i == 0 || i == 3) {
+        if (i == 0) {
+            mat[i].x = 1;
+            mat[i].y = 0;
+        } else if (i == 3) {
             mat[i].x = cos(param1);
             mat[i].y = sin(param1);
         } else {
@@ -121,6 +125,10 @@ void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double p
 
 
 initialize_kernel = cp.RawKernel(cuda_code, "initialize_gate_matrix")
+
+# dry run to compile the kernel
+mat = cp.empty(4, dtype=cp.complex128)
+initialize_kernel((1,), (4,), (mat, 0, 0.0, 0.0, 0.0))
 
 
 def fast_gate_array(gate_name: str, params: Sequence[float]) -> cp.ndarray:
