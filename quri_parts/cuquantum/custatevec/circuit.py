@@ -107,17 +107,17 @@ void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double p
         }
     } else if (gate_type == 5) { // U3
         if (i == 0) {
-            mat[i].x = cos(param1 / 2.0);
+            mat[i].x = cost;
             mat[i].y = 0;
         } else if (i == 1) {
-            mat[i].x = -sin(param1 / 2.0) * cos(param3);
-            mat[i].y = -sin(param1 / 2.0) * sin(param3);
+            mat[i].x = -sint * cos(param3);
+            mat[i].y = -sint * sin(param3);
         } else if (i == 2) {
-            mat[i].x = sin(param1 / 2.0) * cos(param2);
-            mat[i].y = sin(param1 / 2.0) * sin(param2);
+            mat[i].x = sint * cos(param2);
+            mat[i].y = sint * sin(param2);
         } else {
-            mat[i].x = cos(param1 / 2.0) * cos(param2 + param3);
-            mat[i].y = cos(param1 / 2.0) * sin(param2 + param3);
+            mat[i].x = cost * cos(param2 + param3);
+            mat[i].y = cost * sin(param2 + param3);
         }
     }
 }
