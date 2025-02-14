@@ -56,12 +56,12 @@ def evaluate_state_to_vector(
     qubit_count = state.qubit_count
 
     if isinstance(state, QuantumStateVector):
-        sv = np.array(state.vector, dtype=np.complex64)
+        sv = cp.array(state.vector, dtype=precision)
     else:
-        sv = np.zeros(2**qubit_count, dtype=np.complex64)
+        sv = cp.zeros(2**qubit_count, dtype=precision)
         sv[0] = 1.0
 
-    sv = cp.array(sv, dtype=precision)
+    # sv = cp.array(sv, dtype=precision)
     circuit = state.circuit
 
     transpiler = ParallelDecomposer(
@@ -70,17 +70,57 @@ def evaluate_state_to_vector(
     circuit = transpiler(circuit)
 
     mat_dict = {}
+    rot_gate_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
+    rot_mat_dict = {}
+
+    for rot_gate in rot_gate_to_cache:
+        rot_mat_dict[rot_gate] = {}
+    qubits_cache = {}
+    qubits_ptr_cache = {}
 
     handle = cuquantum.custatevec.create()
     for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
+        len_targets = len(g.target_indices)
+        len_controls = len(g.control_indices)
+        if len_targets <= 2:
+            if g.target_indices not in qubits_cache:
+                qubits_cache[g.target_indices] = np.array(
+                    g.target_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.target_indices] = qubits_cache[
+                    g.target_indices
+                ].ctypes.data
+            targets = qubits_cache[g.target_indices]
+            targets_ptr = qubits_ptr_cache[g.target_indices]
+        else:
+            targets = np.array(g.target_indices, dtype=np.int32)
+            targets_ptr = targets.ctypes.data
+        if len_controls <= 2:
+            if g.control_indices not in qubits_cache:
+                qubits_cache[g.control_indices] = np.array(
+                    g.control_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.control_indices] = qubits_cache[
+                    g.control_indices
+                ].ctypes.data
+            controls = qubits_cache[g.control_indices]
+            controls_ptr = qubits_ptr_cache[g.control_indices]
+        else:
+            controls = np.array(g.control_indices, dtype=np.int32)
+            controls_ptr = controls.ctypes.data
+
         if g.name in gates_to_cache:
             if g.name not in mat_dict:
                 mat = cp.array(gate_array(g), dtype=precision)
                 mat_dict[g.name] = mat
             else:
                 mat = mat_dict[g.name]
+        elif g.name in rot_gate_to_cache:
+            if g.params not in rot_mat_dict[g.name]:
+                mat = cp.array(gate_array(g), dtype=precision)
+                rot_mat_dict[g.name][g.params] = mat
+            else:
+                mat = rot_mat_dict[g.name][g.params]
         else:
             mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
@@ -93,8 +133,8 @@ def evaluate_state_to_vector(
             cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
-            len(targets),
-            len(controls),
+            len_targets,
+            len_controls,
             cuda_c_type,
         )
 
@@ -115,11 +155,11 @@ def evaluate_state_to_vector(
             cuda_d_type,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
+            targets_ptr,
+            len_targets,
+            controls_ptr,
             0,
-            len(controls),
+            len_controls,
             cuda_c_type,
             workspace_ptr,
             workspaceSize,
