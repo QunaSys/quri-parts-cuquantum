@@ -14,6 +14,7 @@ try:
     import cupy as cp
 except ImportError:
     raise RuntimeError("CuPy is not installed.")
+
 import numpy as np
 import numpy.typing as npt
 from quri_parts.circuit import QuantumGate, gate_names
