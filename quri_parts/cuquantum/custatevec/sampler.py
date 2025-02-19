@@ -124,7 +124,7 @@ def _sample(
                 sv.data.ptr,  # type: ignore
                 cuda_d_type,
                 qubit_count,
-                g.params[0],
+                g.params[0] / 2,
                 paulis,
                 targets_ptr,
                 len_targets,
