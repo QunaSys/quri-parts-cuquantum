@@ -28,6 +28,7 @@ from quri_parts.circuit.transpile import (
     PauliRotationDecomposeTranspiler,
 )
 from quri_parts.core.sampling import ConcurrentSampler, MeasurementCounts, Sampler
+from quri_parts.circuit import gate_names
 
 from . import PRECISIONS, Precision
 from .circuit import gate_array, gate_map
@@ -68,9 +69,10 @@ def _sample(
     rng = np.random.default_rng(seed)
     rand_nums = rng.random(shots)
 
-    transpiler = ParallelDecomposer(
-        [PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]
-    )
+    # transpiler = ParallelDecomposer(
+    #     [PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]
+    # )
+    transpiler = ParallelDecomposer([PauliDecomposeTranspiler()])
     circuit = transpiler(circuit)
 
     mat_dict = {}
@@ -111,6 +113,27 @@ def _sample(
         else:
             controls = np.array(g.control_indices, dtype=np.int32)
             controls_ptr = controls.ctypes.data
+
+        if g.name == gate_names.PauliRotation:
+            # return qgate.PauliEvolutionGate(operator, time=float(gate.params[0] / 2))
+            paulis = cp.array(g.pauli_ids, dtype=cp.int32)
+
+            # apply gate
+            cuquantum.custatevec.apply_pauli_rotation(
+                handle,
+                sv.data.ptr,  # type: ignore
+                cuda_d_type,
+                qubit_count,
+                g.params[0],
+                paulis,
+                targets_ptr,
+                len_targets,
+                controls_ptr,
+                0,
+                len_controls,
+            )
+
+            continue  # to next gate g
 
         if g.name in gates_to_cache:
             if g.name not in mat_dict:

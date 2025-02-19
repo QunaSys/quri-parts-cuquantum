@@ -33,6 +33,7 @@ def test_sampler(qubits: int, shots: int) -> None:
     for i in range(qubits):
         circuit.add_H_gate(i)
 
+    circuit.add_PauliRotation_gate([0, 1], [1, 2], 0.1)
     sampler = create_cuquantum_vector_sampler()
     counts = sampler(circuit, shots)
 
