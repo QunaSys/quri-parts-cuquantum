@@ -70,13 +70,6 @@ def _sample(
     circuit = transpiler(circuit)
 
     handle = cuquantum.custatevec.create()
-    print(f"{type(sv)=}")
-    print(f"{type(qubit_count)=}")
-    print(f"{type(precision)=}")
-    print(f"{type(handle)=}")
-    print(f"{type(cuda_d_type)=}")
-    print(f"{type(cuda_c_type)=}")
-    print(f"{type(circuit)=}")
 
     _update_statevector(
         circuit=circuit,

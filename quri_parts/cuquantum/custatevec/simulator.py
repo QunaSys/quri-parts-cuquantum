@@ -37,7 +37,6 @@ for gate_name in gate_map.keys():
 rot_gates_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
 
 
-# TODO: Fix typing
 def _update_statevector(
     circuit: NonParametricQuantumCircuit,
     sv: cp.ndarray,
