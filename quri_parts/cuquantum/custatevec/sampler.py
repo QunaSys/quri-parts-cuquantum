@@ -33,6 +33,20 @@ from . import PRECISIONS, Precision
 
 from .simulator import _update_statevector
 
+import cupy as cp
+from cuquantum import custatevec
+import time
+
+
+# GPU メモリ使用状況を取得する関数
+def get_gpu_memory() -> None:
+    mempool = cp.get_default_memory_pool()
+
+    used = mempool.used_bytes()  # 現在使用中のメモリ
+    total = mempool.total_bytes()  # 確保済みのメモリ
+
+    print(f"GPU Memory Usage: {used / 1e6:.2f} MB / {total / 1e6:.2f} MB")
+
 
 def _sample(
     circuit: NonParametricQuantumCircuit,
@@ -40,6 +54,7 @@ def _sample(
     precision: Precision = "complex128",
     seed: int = 0,
 ) -> MeasurementCounts:
+    get_gpu_memory()
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
     if cuquantum is None:
@@ -54,6 +69,8 @@ def _sample(
     else:
         cuda_d_type = cuquantum.cudaDataType.CUDA_C_64F
         cuda_c_type = cuquantum.ComputeType.COMPUTE_64F
+
+    get_gpu_memory()
 
     qubit_count = circuit.qubit_count
     sv = cp.zeros(2**qubit_count, dtype=precision)
@@ -71,6 +88,7 @@ def _sample(
 
     handle = cuquantum.custatevec.create()
 
+    get_gpu_memory()
     _update_statevector(
         circuit=circuit,
         sv=sv,
@@ -81,11 +99,13 @@ def _sample(
         cuda_c_type=cuda_c_type,
     )
 
+    get_gpu_memory()
     # create sampler and check the size of external workspace
     sampler, extraworkspace_sizeInBytes = cuquantum.custatevec.sampler_create(
         handle, sv.data.ptr, cuda_d_type, qubit_count, shots
     )
 
+    get_gpu_memory()
     # allocate external workspace
     extraWorkspace = cp.cuda.alloc(extraworkspace_sizeInBytes)
 
@@ -106,12 +126,15 @@ def _sample(
         cuquantum.custatevec.SamplerOutput.RANDNUM_ORDER,
     )
 
+    get_gpu_memory()
     # destroy sampler
     cuquantum.custatevec.sampler_destroy(sampler)
 
+    get_gpu_memory()
     # destroy handle
     cuquantum.custatevec.destroy(handle)
 
+    get_gpu_memory()
     return Counter(res_bits)
 
 

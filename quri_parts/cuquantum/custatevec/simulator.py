@@ -36,6 +36,14 @@ for gate_name in gate_map.keys():
 
 rot_gates_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
 
+# GPU メモリ使用状況を取得する関数
+def get_gpu_memory() -> None:
+    mempool = cp.get_default_memory_pool()
+
+    used = mempool.used_bytes()  # 現在使用中のメモリ
+    total = mempool.total_bytes()  # 確保済みのメモリ
+
+    print(f"GPU Memory Usage: {used / 1e6:.2f} MB / {total / 1e6:.2f} MB")
 
 def _update_statevector(
     circuit: NonParametricQuantumCircuit,
@@ -48,11 +56,14 @@ def _update_statevector(
 ) -> None:
     mat_dict = {}
     rot_mat_dict = {}
+    rot_mat_dict_cnt = 0
+    max_rot_mat_dict_cnt = 1e7
     for rot_gate in rot_gates_to_cache:
         rot_mat_dict[rot_gate] = {}
     qubits_cache = {}
     qubits_ptr_cache = {}
 
+    get_gpu_memory()
     for g in circuit.gates:
         len_targets = len(g.target_indices)
         len_controls = len(g.control_indices)
@@ -90,9 +101,13 @@ def _update_statevector(
             else:
                 mat = mat_dict[g.name]
         elif g.name in rot_gates_to_cache:
-            if g.params not in rot_mat_dict[g.name]:
+            if (
+                rot_mat_dict_cnt <= max_rot_mat_dict_cnt
+                and g.params not in rot_mat_dict[g.name]
+            ):
                 mat = gate_array(g, dtype=precision)
                 rot_mat_dict[g.name][g.params] = mat
+                rot_mat_dict_cnt += 1
             else:
                 mat = rot_mat_dict[g.name][g.params]
         else:
@@ -138,6 +153,7 @@ def _update_statevector(
             workspace_ptr,
             workspace_size,
         )
+    get_gpu_memory()
 
 
 def evaluate_state_to_vector(
