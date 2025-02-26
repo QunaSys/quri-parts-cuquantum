@@ -36,6 +36,7 @@ for gate_name in gate_map.keys():
 
 rot_gates_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
 
+
 def _update_statevector(
     circuit: NonParametricQuantumCircuit,
     sv: cp.ndarray,
@@ -48,7 +49,8 @@ def _update_statevector(
     mat_dict = {}
     rot_mat_dict = {}
     rot_mat_dict_cnt = 0
-    max_rot_mat_dict_cnt = 1e7
+    max_rot_mat_dict_cnt = int(1e6)
+    cache_rot_gates = True
     for rot_gate in rot_gates_to_cache:
         rot_mat_dict[rot_gate] = {}
     qubits_cache = {}
@@ -90,14 +92,13 @@ def _update_statevector(
                 mat_dict[g.name] = mat
             else:
                 mat = mat_dict[g.name]
-        elif g.name in rot_gates_to_cache:
-            if (
-                rot_mat_dict_cnt <= max_rot_mat_dict_cnt
-                and g.params not in rot_mat_dict[g.name]
-            ):
+        elif cache_rot_gates and g.name in rot_gates_to_cache:
+            if g.params not in rot_mat_dict[g.name]:
                 mat = gate_array(g, dtype=precision)
                 rot_mat_dict[g.name][g.params] = mat
                 rot_mat_dict_cnt += 1
+                if rot_mat_dict_cnt >= max_rot_mat_dict_cnt:
+                    cache_rot_gates = False
             else:
                 mat = rot_mat_dict[g.name][g.params]
         else:
