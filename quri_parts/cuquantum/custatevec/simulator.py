@@ -36,15 +36,6 @@ for gate_name in gate_map.keys():
 
 rot_gates_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
 
-# GPU メモリ使用状況を取得する関数
-def get_gpu_memory() -> None:
-    mempool = cp.get_default_memory_pool()
-
-    used = mempool.used_bytes()  # 現在使用中のメモリ
-    total = mempool.total_bytes()  # 確保済みのメモリ
-
-    print(f"GPU Memory Usage: {used / 1e6:.2f} MB / {total / 1e6:.2f} MB")
-
 def _update_statevector(
     circuit: NonParametricQuantumCircuit,
     sv: cp.ndarray,
@@ -63,7 +54,6 @@ def _update_statevector(
     qubits_cache = {}
     qubits_ptr_cache = {}
 
-    get_gpu_memory()
     for g in circuit.gates:
         len_targets = len(g.target_indices)
         len_controls = len(g.control_indices)
@@ -153,7 +143,6 @@ def _update_statevector(
             workspace_ptr,
             workspace_size,
         )
-    get_gpu_memory()
 
 
 def evaluate_state_to_vector(
