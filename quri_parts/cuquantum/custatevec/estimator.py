@@ -48,6 +48,7 @@ from quri_parts.core.state import (
 from . import PRECISIONS, Precision
 from .circuit import gate_array, gate_map
 from .operator import convert_operator
+from .simulator import _update_statevector
 
 gates_to_cache = set()
 for gate_name in gate_map.keys():
@@ -106,61 +107,17 @@ def _estimate(
     )
     circuit = transpiler(state.circuit)
 
-    mat_dict = {}
-
     handle = cuquantum.custatevec.create()
-    for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
-        if g.name in gates_to_cache:
-            if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
-                mat_dict[g.name] = mat
-            else:
-                mat = mat_dict[g.name]
-        else:
-            mat = cp.array(gate_array(g), dtype=precision)
-        mat_ptr = mat.data.ptr
 
-        workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(
-            handle,
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            len(targets),
-            len(controls),
-            cuda_c_type,
-        )
-
-        # check the size of external workspace
-        if workspace_size > 0:
-            workspace = cp.cuda.memory.alloc(workspace_size)
-            workspace_ptr = workspace.ptr
-        else:
-            workspace_ptr = 0
-
-        # apply gate
-        cuquantum.custatevec.apply_matrix(
-            handle,
-            sv.data.ptr,  # type: ignore
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
-            0,
-            len(controls),
-            cuda_c_type,
-            workspace_ptr,
-            workspace_size,
-        )
+    _update_statevector(
+        circuit=circuit,
+        sv=sv,
+        qubit_count=qubit_count,
+        precision=precision,
+        handle=handle,
+        cuda_d_type=cuda_d_type,
+        cuda_c_type=cuda_c_type,
+    )
 
     # apply Pauli operator
     cuquantum.custatevec.compute_expectations_on_pauli_basis(
