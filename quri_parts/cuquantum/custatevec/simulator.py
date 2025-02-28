@@ -25,6 +25,7 @@ from quri_parts.circuit.transpile import (
     PauliRotationDecomposeTranspiler,
 )
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
+from quri_parts.circuit import NonParametricQuantumCircuit
 
 from . import PRECISIONS, Precision
 from .circuit import gate_array, gate_map
@@ -32,6 +33,117 @@ from .circuit import gate_array, gate_map
 gates_to_cache = set()
 for gate_name in gate_map.keys():
     gates_to_cache.add(gate_name)
+
+rot_gates_to_cache = set(["RX", "RY", "RZ", "U1", "U2", "U3"])
+
+
+def _update_statevector(
+    circuit: NonParametricQuantumCircuit,
+    sv: cp.ndarray,
+    qubit_count: int,
+    precision: Precision,
+    handle: int,
+    cuda_d_type: cuquantum.cudaDataType,
+    cuda_c_type: cuquantum.ComputeType,
+) -> None:
+    mat_dict = {}
+    rot_mat_dict = {}
+    rot_mat_dict_cnt = 0
+    max_rot_mat_dict_cnt = int(1e6)
+    cache_rot_gates = True
+    for rot_gate in rot_gates_to_cache:
+        rot_mat_dict[rot_gate] = {}
+    qubits_cache = {}
+    qubits_ptr_cache = {}
+
+    for g in circuit.gates:
+        len_targets = len(g.target_indices)
+        len_controls = len(g.control_indices)
+        if len_targets <= 2:
+            if g.target_indices not in qubits_cache:
+                qubits_cache[g.target_indices] = np.array(
+                    g.target_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.target_indices] = qubits_cache[
+                    g.target_indices
+                ].ctypes.data
+            targets = qubits_cache[g.target_indices]
+            targets_ptr = qubits_ptr_cache[g.target_indices]
+        else:
+            targets = np.array(g.target_indices, dtype=np.int32)
+            targets_ptr = targets.ctypes.data
+        if len_controls <= 2:
+            if g.control_indices not in qubits_cache:
+                qubits_cache[g.control_indices] = np.array(
+                    g.control_indices, dtype=np.int32
+                )
+                qubits_ptr_cache[g.control_indices] = qubits_cache[
+                    g.control_indices
+                ].ctypes.data
+            controls = qubits_cache[g.control_indices]
+            controls_ptr = qubits_ptr_cache[g.control_indices]
+        else:
+            controls = np.array(g.control_indices, dtype=np.int32)
+            controls_ptr = controls.ctypes.data
+
+        if g.name in gates_to_cache:
+            if g.name not in mat_dict:
+                mat = gate_array(g, dtype=precision)
+                mat_dict[g.name] = mat
+            else:
+                mat = mat_dict[g.name]
+        elif cache_rot_gates and g.name in rot_gates_to_cache:
+            if g.params not in rot_mat_dict[g.name]:
+                mat = gate_array(g, dtype=precision)
+                rot_mat_dict[g.name][g.params] = mat
+                rot_mat_dict_cnt += 1
+                if rot_mat_dict_cnt >= max_rot_mat_dict_cnt:
+                    cache_rot_gates = False
+            else:
+                mat = rot_mat_dict[g.name][g.params]
+        else:
+            mat = gate_array(g, dtype=precision)
+        mat_ptr = mat.data.ptr  # type: ignore
+
+        workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(
+            handle,
+            cuda_d_type,
+            qubit_count,
+            mat_ptr,
+            cuda_d_type,
+            cuquantum.custatevec.MatrixLayout.ROW,
+            0,
+            len_targets,
+            len_controls,
+            cuda_c_type,
+        )
+
+        # check the size of external workspace
+        if workspace_size > 0:
+            workspace = cp.cuda.memory.alloc(workspace_size)
+            workspace_ptr = workspace.ptr
+        else:
+            workspace_ptr = 0
+
+        # apply gate
+        cuquantum.custatevec.apply_matrix(
+            handle,
+            sv.data.ptr,  # type: ignore
+            cuda_d_type,
+            qubit_count,
+            mat_ptr,
+            cuda_d_type,
+            cuquantum.custatevec.MatrixLayout.ROW,
+            0,
+            targets_ptr,
+            len_targets,
+            controls_ptr,
+            0,
+            len_controls,
+            cuda_c_type,
+            workspace_ptr,
+            workspace_size,
+        )
 
 
 def evaluate_state_to_vector(
@@ -56,12 +168,11 @@ def evaluate_state_to_vector(
     qubit_count = state.qubit_count
 
     if isinstance(state, QuantumStateVector):
-        sv = np.array(state.vector, dtype=np.complex64)
+        sv = cp.array(state.vector, dtype=precision)
     else:
-        sv = np.zeros(2**qubit_count, dtype=np.complex64)
+        sv = cp.zeros(2**qubit_count, dtype=precision)
         sv[0] = 1.0
 
-    sv = cp.array(sv, dtype=precision)
     circuit = state.circuit
 
     transpiler = ParallelDecomposer(
@@ -69,61 +180,17 @@ def evaluate_state_to_vector(
     )
     circuit = transpiler(circuit)
 
-    mat_dict = {}
-
     handle = cuquantum.custatevec.create()
-    for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
-        if g.name in gates_to_cache:
-            if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
-                mat_dict[g.name] = mat
-            else:
-                mat = mat_dict[g.name]
-        else:
-            mat = cp.array(gate_array(g), dtype=precision)
-        mat_ptr = mat.data.ptr
 
-        workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
-            handle,
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            len(targets),
-            len(controls),
-            cuda_c_type,
-        )
-
-        # check the size of external workspace
-        if workspaceSize > 0:
-            workspace = cp.cuda.memory.alloc(workspaceSize)
-            workspace_ptr = workspace.ptr
-        else:
-            workspace_ptr = 0
-
-        # apply gate
-        cuquantum.custatevec.apply_matrix(
-            handle,
-            sv.data.ptr,  # type: ignore
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
-            0,
-            len(controls),
-            cuda_c_type,
-            workspace_ptr,
-            workspaceSize,
-        )
+    _update_statevector(
+        circuit=circuit,
+        sv=sv,
+        precision=precision,
+        qubit_count=qubit_count,
+        handle=handle,
+        cuda_d_type=cuda_d_type,
+        cuda_c_type=cuda_c_type,
+    )
 
     cuquantum.custatevec.destroy(handle)
 

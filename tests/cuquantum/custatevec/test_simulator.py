@@ -24,6 +24,7 @@ def test_evaluate_state_to_vector(qubits: int) -> None:
     for i in range(qubits):
         circuit.add_H_gate(i)
     circuit.add_X_gate(0)
+    circuit.add_UnitaryMatrix_gate((2,), [[0, 1], [1, 0]])
     circuit.add_H_gate(1)
     circuit.add_Z_gate(2)
     circuit.add_Y_gate(3)
@@ -31,6 +32,27 @@ def test_evaluate_state_to_vector(qubits: int) -> None:
 
     state = quantum_state(n_qubits=qubits, circuit=circuit)
     vector = evaluate_state_to_vector(state).vector
+    target_state = quantum_state(n_qubits=qubits, circuit=circuit)
+    target_vector = qulacs_evaluate_state_to_vector(target_state).vector
+
+    assert all(abs(v - tv) < 1e-6 for v, tv in zip(vector, target_vector))
+
+
+@pytest.mark.parametrize("qubits", [6, 10])
+def test_evaluate_state_to_vector_complex64(qubits: int) -> None:
+    circuit = QuantumCircuit(qubits)
+    for i in range(qubits):
+        circuit.add_H_gate(i)
+    circuit.add_X_gate(0)
+    circuit.add_H_gate(1)
+    circuit.add_Z_gate(2)
+    circuit.add_Y_gate(3)
+    circuit.add_UnitaryMatrix_gate((2,), [[0, 1], [1, 0]])
+    circuit.add_RZ_gate(4, 0.1)
+    circuit.add_PauliRotation_gate((0, 2, 3), (1, 2, 3), 0.1)
+
+    state = quantum_state(n_qubits=qubits, circuit=circuit)
+    vector = evaluate_state_to_vector(state, precision="complex64").vector
     target_state = quantum_state(n_qubits=qubits, circuit=circuit)
     target_vector = qulacs_evaluate_state_to_vector(target_state).vector
 

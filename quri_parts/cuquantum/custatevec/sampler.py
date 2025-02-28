@@ -30,11 +30,8 @@ from quri_parts.circuit.transpile import (
 from quri_parts.core.sampling import ConcurrentSampler, MeasurementCounts, Sampler
 
 from . import PRECISIONS, Precision
-from .circuit import gate_array, gate_map
 
-gates_to_cache = set()
-for gate_name in gate_map.keys():
-    gates_to_cache.add(gate_name)
+from .simulator import _update_statevector
 
 
 def _sample(
@@ -58,8 +55,10 @@ def _sample(
         cuda_d_type = cuquantum.cudaDataType.CUDA_C_64F
         cuda_c_type = cuquantum.ComputeType.COMPUTE_64F
 
+
     qubit_count = circuit.qubit_count
-    sv = cp.array([1.0] + [0.0] * (2**qubit_count - 1), dtype=precision)
+    sv = cp.zeros(2**qubit_count, dtype=precision)
+    sv[0] = 1.0
     res_bits = np.empty((shots,), dtype=np.int64)
     bit_ordering = np.arange(qubit_count, dtype=np.int32)
 
@@ -71,61 +70,17 @@ def _sample(
     )
     circuit = transpiler(circuit)
 
-    mat_dict = {}
-
     handle = cuquantum.custatevec.create()
-    for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
-        if g.name in gates_to_cache:
-            if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
-                mat_dict[g.name] = mat
-            else:
-                mat = mat_dict[g.name]
-        else:
-            mat = cp.array(gate_array(g), dtype=precision)
-        mat_ptr = mat.data.ptr
 
-        workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(
-            handle,
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            len(targets),
-            len(controls),
-            cuda_c_type,
-        )
-
-        # check the size of external workspace
-        if workspace_size > 0:
-            workspace = cp.cuda.memory.alloc(workspace_size)
-            workspace_ptr = workspace.ptr
-        else:
-            workspace_ptr = 0
-
-        # apply gate
-        cuquantum.custatevec.apply_matrix(
-            handle,
-            sv.data.ptr,  # type: ignore
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
-            0,
-            len(controls),
-            cuda_c_type,
-            workspace_ptr,
-            workspace_size,
-        )
+    _update_statevector(
+        circuit=circuit,
+        sv=sv,
+        qubit_count=qubit_count,
+        precision=precision,
+        handle=handle,
+        cuda_d_type=cuda_d_type,
+        cuda_c_type=cuda_c_type,
+    )
 
     # create sampler and check the size of external workspace
     sampler, extraworkspace_sizeInBytes = cuquantum.custatevec.sampler_create(
