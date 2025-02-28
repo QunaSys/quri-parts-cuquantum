@@ -124,16 +124,90 @@ void initialize_gate_matrix(double2 *mat, int gate_type, double param1, double p
 }
 """
 
+cuda_code_float = r"""
+__constant__ float RX_LUT[4] = {1, 0, 0, 1};
+__constant__ float RY_COS_LUT[4] = {1, 0, 0, 1};
+__constant__ float RY_SIN_LUT[4] = {0, -1, 1, 0};
+__constant__ float RZ_LUT[4] = {1, 0, 0, 1};
+__constant__ float M_SQRT1_2 = 0.7071067811865476f;
 
+extern "C" __global__
+void initialize_gate_matrix_float(float2 *mat, int gate_type, double param1, double param2, double param3) {
+    int i = threadIdx.x;
+    float cost = cos(param1 / 2.0);
+    float sint = sin(param1 / 2.0);
+
+    if (gate_type == 0) { // RX
+        mat[i].x = cost * RX_LUT[i];
+        mat[i].y = -sint * (1 - RX_LUT[i]);
+    } else if (gate_type == 1) { // RY
+        mat[i].x = cost * RY_COS_LUT[i] + sint * RY_SIN_LUT[i];
+        mat[i].y = 0;
+    } else if (gate_type == 2) { // RZ
+        mat[i].x = cost * RZ_LUT[i];
+        mat[i].y = -sint * (i == 0 ? 1 : (i == 3 ? -1 : 0));
+    } else if (gate_type == 3) { // U1 (Phase gate)
+        if (i == 0) {
+            mat[i].x = 1;
+            mat[i].y = 0;
+        } else if (i == 3) {
+            mat[i].x = cos(param1);
+            mat[i].y = sin(param1);
+        } else {
+            mat[i].x = 0;
+            mat[i].y = 0;
+        }
+    } else if (gate_type == 4) { // U2
+        if (i == 0) {
+            mat[i].x = M_SQRT1_2;  // 1/sqrt(2)
+            mat[i].y = 0;
+        } else if (i == 1) {
+            mat[i].x = -M_SQRT1_2 * cos(param2);
+            mat[i].y = -M_SQRT1_2 * sin(param2);
+        } else if (i == 2) {
+            mat[i].x = M_SQRT1_2 * cos(param1);
+            mat[i].y = M_SQRT1_2 * sin(param1);
+        } else {
+            mat[i].x = M_SQRT1_2 * cos(param1 + param2);
+            mat[i].y = M_SQRT1_2 * sin(param1 + param2);
+        }
+    } else if (gate_type == 5) { // U3
+        if (i == 0) {
+            mat[i].x = cost;
+            mat[i].y = 0;
+        } else if (i == 1) {
+            mat[i].x = -sint * cos(param3);
+            mat[i].y = -sint * sin(param3);
+        } else if (i == 2) {
+            mat[i].x = sint * cos(param2);
+            mat[i].y = sint * sin(param2);
+        } else {
+            mat[i].x = cost * cos(param2 + param3);
+            mat[i].y = cost * sin(param2 + param3);
+        }
+    }
+}
+"""
 initialize_kernel = cp.RawKernel(cuda_code, "initialize_gate_matrix")
+initialize_kernel_float = cp.RawKernel(cuda_code_float, "initialize_gate_matrix_float")
 
 # dry run to compile the kernel
 mat = cp.empty(4, dtype=cp.complex128)
 initialize_kernel((1,), (4,), (mat, 0, 0.0, 0.0, 0.0))
+mat = cp.empty(4, dtype=cp.complex64)
+initialize_kernel_float((1,), (4,), (mat, 0, 0.0, 0.0, 0.0))
 
 
-def fast_gate_array(gate_name: str, params: Sequence[float]) -> cp.ndarray:
-    mat = cp.empty(4, dtype=cp.complex128)
+def fast_gate_array(
+    gate_name: str, params: Sequence[float], precision: str = "complex128"
+) -> cp.ndarray:
+    if precision == "complex128":
+        initialize_kernel_precision = initialize_kernel
+    elif precision == "complex64":
+        initialize_kernel_precision = initialize_kernel_float
+    else:
+        raise ValueError(f"Unsupported precision: {precision}")
+    mat = cp.empty(4, dtype=precision)
 
     gate_types = {"RX": 0, "RY": 1, "RZ": 2, "U1": 3, "U2": 4, "U3": 5}
 
@@ -142,11 +216,15 @@ def fast_gate_array(gate_name: str, params: Sequence[float]) -> cp.ndarray:
         raise ValueError(f"Unsupported gate: {gate_name}")
 
     if gate_type <= 3:
-        initialize_kernel((1,), (4,), (mat, gate_type, params[0], 0.0, 0.0))
+        initialize_kernel_precision((1,), (4,), (mat, gate_type, params[0], 0.0, 0.0))
     elif gate_type <= 4:
-        initialize_kernel((1,), (4,), (mat, gate_type, params[0], params[1], 0.0))
+        initialize_kernel_precision(
+            (1,), (4,), (mat, gate_type, params[0], params[1], 0.0)
+        )
     else:
-        initialize_kernel((1,), (4,), (mat, gate_type, params[0], params[1], params[2]))
+        initialize_kernel_precision(
+            (1,), (4,), (mat, gate_type, params[0], params[1], params[2])
+        )
     return mat
 
 
@@ -163,7 +241,7 @@ def gate_array(gate: QuantumGate, dtype: str = "complex128") -> Optional[cp.ndar
         return cp.array(gate_map[gate.name], dtype=dtype)
     p = gate.params
     if gate.name in rot_gates:
-        return fast_gate_array(gate.name, p)
+        return fast_gate_array(gate.name, p, precision=dtype)
     elif gate.name == "UnitaryMatrix":
         return cp.array(
             np.array(gate.unitary_matrix, dtype=dtype).flatten(), dtype=dtype
