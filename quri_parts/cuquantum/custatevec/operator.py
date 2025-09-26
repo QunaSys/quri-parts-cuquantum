@@ -9,7 +9,6 @@
 # limitations under the License.
 
 from typing import Iterable, Union
-
 from typing_extensions import TypeAlias
 
 try:
