@@ -11,13 +11,8 @@ readme = "README.md"
 repository = "https://github.com/QunaSys/quri-parts-cuquantum"
 license = "Apache-2.0"
 keywords = ["quantum", "quantum computing", "cuQuantum"]
-classifiers = [
-    "Topic :: Scientific/Engineering :: Physics",
-    "Typing :: Typed"
-]
-packages = [
-    { include = "quri_parts" }
-]
+classifiers = ["Topic :: Scientific/Engineering :: Physics", "Typing :: Typed"]
+packages = [{ include = "quri_parts" }]
 
 
 [tool.poetry-dynamic-versioning]
@@ -26,7 +21,7 @@ style = "pep440"
 
 
 [tool.poetry.dependencies]
-python = ">=3.9.8,<3.12"
+python = ">=3.9.8,<4"
 numpy = "^1.26.3"
 quri-parts = "<1.0.0"
 
