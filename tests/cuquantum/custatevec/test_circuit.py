@@ -17,7 +17,6 @@ from quri_parts.circuit import (
     RY,
     RZ,
     SWAP,
-    TOFFOLI,
     U1,
     U2,
     U3,
@@ -30,11 +29,11 @@ from quri_parts.circuit import (
     SqrtXdag,
     SqrtY,
     SqrtYdag,
+    TOFFOLI,
     X,
     Y,
     Z,
 )
-
 from quri_parts.cuquantum.custatevec.circuit import gate_array
 
 

@@ -9,11 +9,11 @@
 # limitations under the License.
 
 import pytest
-from quri_parts.circuit import QuantumCircuit
 
+from quri_parts.circuit import QuantumCircuit
 from quri_parts.cuquantum.custatevec.sampler import (
-    create_cuquantum_vector_concurrent_sampler,
     create_cuquantum_vector_sampler,
+    create_cuquantum_vector_concurrent_sampler,
 )
 
 

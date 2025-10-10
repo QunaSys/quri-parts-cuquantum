@@ -9,7 +9,7 @@
 # limitations under the License.
 
 from functools import partial
-from typing import NamedTuple, Union
+from typing import NamedTuple, Union, Optional
 
 from typing_extensions import TypeAlias
 
@@ -23,6 +23,7 @@ except ImportError:
     cuquantum = None
 import numpy as np
 from quri_parts.circuit.transpile import (
+    CircuitTranspiler,
     ParallelDecomposer,
     PauliDecomposeTranspiler,
     PauliRotationDecomposeTranspiler,
@@ -44,14 +45,12 @@ from quri_parts.core.state import (
     ParametricQuantumStateVector,
     QuantumStateVector,
 )
+from quri_parts.circuit import QuantumCircuit
 
 from . import PRECISIONS, Precision
-from .circuit import gate_array, gate_map
+from .circuit import gate_array
 from .operator import convert_operator
-
-gates_to_cache = set()
-for gate_name in gate_map.keys():
-    gates_to_cache.add(gate_name)
+from .sampler import _update_state
 
 
 class _Estimate(NamedTuple):
@@ -73,7 +72,12 @@ def _estimate(
     op: Estimatable,
     state: CuQuantumStateT,
     precision: Precision = "complex128",
+    n_global_qubits: int = 0,
+    device_network_type = None,
+    transpiler: Optional[CircuitTranspiler] = None,
 ) -> Estimate[complex]:
+    if device_network_type is None:
+        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
     if cuquantum is None:
@@ -90,101 +94,129 @@ def _estimate(
         cuda_c_type = cuquantum.ComputeType.COMPUTE_64F
 
     qubit_count = state.qubit_count
-    paulis, pauli_ids, coefs = convert_operator(op)
-    exp_values = np.empty(len(paulis), dtype=np.float64)
+    gpu_count = 2 ** n_global_qubits
+    n_local_qubits = qubit_count - n_global_qubits
+    local_qubits = set(range(n_local_qubits))
 
+    svs = []
     if isinstance(state, QuantumStateVector):
-        sv = np.array(state.vector, dtype=precision)
+        assert len(state.vector) == 2 ** qubit_count
+        local_vec_len = 2 ** n_local_qubits
+        for i in range(gpu_count):
+            with cp.cuda.Device(i):
+                svs.append(cp.array(state.vector[i * local_vec_len:(i + 1) * local_vec_len], dtype=precision))
     else:
-        sv = np.zeros(2**qubit_count, dtype=precision)
-        sv[0] = 1.0
+        for i in range(gpu_count):
+            with cp.cuda.Device(i):
+                svs.append(cp.zeros(2**n_local_qubits, dtype=precision))
+        cp.put(svs[0], [0], [1.0])
 
-    sv = cp.array(sv)
+    handles = []
+    for i in range(gpu_count):
+        with cp.cuda.Device(i):
+            handles.append(cuquantum.custatevec.create())
 
-    transpiler = ParallelDecomposer(
-        [PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]
-    )
-    circuit = transpiler(state.circuit)
+    phys_to_virt_map = list(range(qubit_count))
 
-    mat_dict = {}
+    # Remove trailing swap gates for efficiency
+    circuit = state.circuit
 
-    handle = cuquantum.custatevec.create()
-    for g in circuit.gates:
-        targets = np.array(g.target_indices, dtype=np.int32)
-        controls = np.array(g.control_indices, dtype=np.int32)
-        if g.name in gates_to_cache:
-            if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
-                mat_dict[g.name] = mat
+    swap_buf = _update_state(svs, handles, circuit, n_global_qubits, transpiler, precision, device_network_type)
+
+    for i, j in reversed(swap_buf):
+        phys_to_virt_map[i], phys_to_virt_map[j] = phys_to_virt_map[j], phys_to_virt_map[i]
+
+    paulis, pauli_ids, coefs = convert_operator(op)
+    exp_values = np.empty(len(paulis) * gpu_count, dtype=np.float64)
+    phys_map = [0 for _ in range(qubit_count)]
+    for i, j in enumerate(phys_to_virt_map):
+        phys_map[j] = i
+
+    for pauli_idx, (pauli_list, idx_list) in enumerate(zip(paulis, pauli_ids)):
+        phys_idx_list = [phys_map[l] for l in idx_list]
+        phys_idx_set = set(phys_idx_list)
+        swap_buf = []
+        i = 0
+        j = n_local_qubits
+        while True:
+            while i in phys_idx_set:
+                i += 1
+            while j < qubit_count and j not in phys_idx_list:
+                j += 1
+            if j < qubit_count:
+                if i < n_local_qubits:
+                    swap_buf.append((i, j))
+                    i += 1
+                    j += 1
+                else:
+                    raise RuntimeError("Cannot process op term")
             else:
-                mat = mat_dict[g.name]
-        else:
-            mat = cp.array(gate_array(g), dtype=precision)
-        mat_ptr = mat.data.ptr
+                break
+        if swap_buf:
+            for i in range(gpu_count):
+                cp.cuda.Device(i).synchronize()
+            with cp.cuda.Device(0):
+                cuquantum.custatevec.multi_device_swap_index_bits(
+                    handles,
+                    gpu_count,
+                    [sv.data.ptr for sv in svs],
+                    cuda_d_type,
+                    n_global_qubits, n_local_qubits,
+                    swap_buf, len(swap_buf), [], [], 0,
+                    device_network_type,
+                )
+        phys_to_virt_map = [0 for _ in range(qubit_count)]
+        for i, j in enumerate(phys_map):
+            phys_to_virt_map[j] = i
+        for i, j in swap_buf:
+            phys_to_virt_map[i], phys_to_virt_map[j] = phys_to_virt_map[j], phys_to_virt_map[i]
+        phys_map = [0 for _ in range(qubit_count)]
+        for i, j in enumerate(phys_to_virt_map):
+            phys_map[j] = i
 
-        workspace_size = cuquantum.custatevec.apply_matrix_get_workspace_size(
-            handle,
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            len(targets),
-            len(controls),
-            cuda_c_type,
-        )
-
-        # check the size of external workspace
-        if workspace_size > 0:
-            workspace = cp.cuda.memory.alloc(workspace_size)
-            workspace_ptr = workspace.ptr
-        else:
-            workspace_ptr = 0
-
-        # apply gate
-        cuquantum.custatevec.apply_matrix(
-            handle,
-            sv.data.ptr,  # type: ignore
-            cuda_d_type,
-            qubit_count,
-            mat_ptr,
-            cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
-            0,
-            targets.ctypes.data,
-            len(targets),
-            controls.ctypes.data,
-            0,
-            len(controls),
-            cuda_c_type,
-            workspace_ptr,
-            workspace_size,
-        )
-
-    # apply Pauli operator
-    cuquantum.custatevec.compute_expectations_on_pauli_basis(
-        handle,
-        sv.data.ptr,  # type: ignore
-        cuda_d_type,
-        qubit_count,
-        exp_values.ctypes.data,
-        paulis,
-        len(paulis),
-        pauli_ids,
-        [len(arr) for arr in pauli_ids],
-    )
+        # apply Pauli operator
+        for i in range(gpu_count):
+            with cp.cuda.Device(i):
+                cuquantum.custatevec.compute_expectations_on_pauli_basis(
+                    handles[i],
+                    svs[i].data.ptr,  # type: ignore
+                    cuda_d_type,
+                    n_local_qubits,
+                    exp_values.ctypes.data + exp_values.dtype.itemsize * (pauli_idx * gpu_count + i),
+                    [pauli_list],
+                    1,
+                    [[phys_map[j] for j in idx_list]],
+                    [len(idx_list)],
+                )
 
     # destroy handle
-    cuquantum.custatevec.destroy(handle)
+    for i in range(gpu_count):
+        with cp.cuda.Device(i) as dev:
+            dev.synchronize()
+            cuquantum.custatevec.destroy(handles[i])
 
-    return _Estimate(value=np.sum(exp_values * coefs))
+    exp_value = 0.0
+    for i in range(len(paulis)):
+        for j in range(i * gpu_count, (i + 1) * gpu_count):
+            # exp_value += exp_values[j] * sv_norms[j] * coefs[i]
+            exp_value += exp_values[j] * coefs[i]
+
+    return _Estimate(value=exp_value)
 
 
 def create_cuquantum_vector_estimator(
     precision: Precision = "complex128",
+    n_global_qubits: int = 0,
+    device_network_type = None,
+    transpiler: Optional[CircuitTranspiler] = None,
 ) -> QuantumEstimator[Union[CircuitQuantumState, QuantumStateVector]]:
-    return partial(_estimate, precision=precision)
+    return partial(
+        _estimate,
+        precision=precision,
+        n_global_qubits=n_global_qubits,
+        device_network_type=device_network_type,
+        transpiler=transpiler
+    )
 
 
 def create_cuquantum_general_vector_estimator(
