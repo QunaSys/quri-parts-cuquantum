@@ -1,15 +1,17 @@
-from quri_parts.cuquantum.custatevec.transpiler import MultiGPUReorderingTranspiler
-from quri_parts.circuit import QuantumCircuit, QuantumGate
-from quri_parts.stim.sampler import create_stim_clifford_sampler
-from quri_parts.qulacs.circuit import convert_circuit
-from qulacsvis import circuit_drawer
 import random
+
 import pytest
+from qulacsvis import circuit_drawer
+from quri_parts.circuit import QuantumCircuit, QuantumGate
+from quri_parts.qulacs.circuit import convert_circuit
+from quri_parts.stim.sampler import create_stim_clifford_sampler
+
+from quri_parts.cuquantum.custatevec.transpiler import MultiGPUReorderingTranspiler
 
 
 def _draw(circuit: QuantumCircuit):
     qc = convert_circuit(circuit)
-    circuit_drawer(qc, 'text', verbose=True)
+    circuit_drawer(qc, "text", verbose=True)
 
 
 def _random_clifford(n_qubits: int, n_gates: int, seed: int) -> QuantumCircuit:
@@ -52,18 +54,32 @@ def _check_circuit(n_local_qubits: int, circuit: QuantumCircuit) -> bool:
 @pytest.mark.parametrize(
     ["seed", "n_qubits", "n_local_qubits", "n_gates"],
     [
-        (0, 5, 2, 20), (0, 5, 3, 20), (0, 5, 4, 20),
-        (0, 10, 5, 40), (0, 10, 9, 40),
-        (0, 10, 4, 39), (0, 10, 3, 39), (0, 10, 2, 39), (0, 9, 3, 29),
-        (0, 9, 2, 24), (0, 8, 4, 36), (0, 8, 3, 29), (0, 8, 2, 29), (0, 7, 5, 34),
-        (0, 7, 4, 28), (0, 7, 3, 28), (0, 7, 2, 16),
+        (0, 5, 2, 20),
+        (0, 5, 3, 20),
+        (0, 5, 4, 20),
+        (0, 10, 5, 40),
+        (0, 10, 9, 40),
+        (0, 10, 4, 39),
+        (0, 10, 3, 39),
+        (0, 10, 2, 39),
+        (0, 9, 3, 29),
+        (0, 9, 2, 24),
+        (0, 8, 4, 36),
+        (0, 8, 3, 29),
+        (0, 8, 2, 29),
+        (0, 7, 5, 34),
+        (0, 7, 4, 28),
+        (0, 7, 3, 28),
+        (0, 7, 2, 16),
         (0, 32, 32, 50),
         (0, 33, 32, 50),
         (0, 34, 32, 50),
         (0, 35, 32, 50),
-    ]
+    ],
 )
-def test_transpiler_random(seed: int, n_qubits: int, n_local_qubits: int, n_gates: int) -> None:
+def test_transpiler_random(
+    seed: int, n_qubits: int, n_local_qubits: int, n_gates: int
+) -> None:
     transpiler = MultiGPUReorderingTranspiler(n_local_qubits)
     orig_circuit = _random_clifford(n_qubits, n_gates, seed)
     print("original")

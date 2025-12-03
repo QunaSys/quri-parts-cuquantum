@@ -8,20 +8,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
+import cmath
+import math
+import random
 
+import pytest
 from quri_parts.circuit import QuantumCircuit, QuantumGate
-from quri_parts.cuquantum.custatevec.sampler import (
-    create_cuquantum_vector_sampler,
-)
-from quri_parts.cuquantum.custatevec.estimator import (
-    create_cuquantum_vector_estimator,
-)
 from quri_parts.core.operator import Operator, pauli_label
 from quri_parts.core.state import GeneralCircuitQuantumState
-import math
-import cmath
-import random
+
+from quri_parts.cuquantum.custatevec.estimator import create_cuquantum_vector_estimator
+from quri_parts.cuquantum.custatevec.sampler import create_cuquantum_vector_sampler
 
 
 def random_clifford(n_qubits: int, n_gates: int, seed: int):
@@ -82,10 +79,11 @@ def test_sampler_mixed(local_qubits: int, global_qubits: int) -> None:
 
     sampler = create_cuquantum_vector_sampler(n_global_qubits=global_qubits)
     counts = sampler(circuit, 10000)
-    limit = 2**(qubits - 1)
+    limit = 2 ** (qubits - 1)
     samples = set(counts.keys())
     count = len([1 for s in samples if s > limit])
-    assert count > 10000 / 2**(qubits - 1) - 5
+    assert count > 10000 / 2 ** (qubits - 1) - 5
+
 
 @pytest.mark.parametrize("local_qubits", [32])
 @pytest.mark.parametrize("global_qubits", [0, 1, 2, 3])
@@ -99,6 +97,7 @@ def test_sampler_cat(local_qubits: int, global_qubits: int) -> None:
 
     assert samples == {0, 2**qubits - 1}
     assert sum(counts.values()) == 10
+
 
 @pytest.mark.parametrize("local_qubits", [32])
 @pytest.mark.parametrize("global_qubits", [0, 1, 2])
