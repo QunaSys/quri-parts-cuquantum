@@ -40,9 +40,10 @@ def evaluate_state_to_vector(
     qubit_count = state.qubit_count
 
     if isinstance(state, QuantumStateVector):
-        sv = np.array(state.vector, dtype=np.complex64)
+        # The type of `QuantumStateVector.vector` is "npt.NDArray[np.complex128]"
+        sv = np.array(state.vector, dtype=np.complex128)
     else:
-        sv = np.zeros(2**qubit_count, dtype=np.complex64)
+        sv = np.zeros(2**qubit_count, dtype=np.complex128)
         sv[0] = 1.0
 
     sv = cp.array(sv)
@@ -55,25 +56,25 @@ def evaluate_state_to_vector(
         controls = np.array(g.control_indices, dtype=np.int32)
         if g.name in gates_to_cache:
             if g.name not in mat_dict:
-                mat = cp.array(gate_array(g), dtype=precision)
+                mat = cp.array(gate_array(g), dtype="complex128")
                 mat_dict[g.name] = mat
             else:
                 mat = mat_dict[g.name]
         else:
-            mat = cp.array(gate_array(g), dtype=precision)
+            mat = cp.array(gate_array(g), dtype="complex128")
         mat_ptr = mat.data.ptr
 
         workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
             handle,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuquantum.cudaDataType.CUDA_C_64F,
             qubit_count,
             mat_ptr,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuquantum.cudaDataType.CUDA_C_64F,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
             len(targets),
             len(controls),
-            cuquantum.ComputeType.COMPUTE_32F,
+            cuquantum.ComputeType.COMPUTE_64F,
         )
 
         # check the size of external workspace
@@ -87,10 +88,10 @@ def evaluate_state_to_vector(
         cuquantum.custatevec.apply_matrix(
             handle,
             sv.data.ptr,  # type: ignore
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuquantum.cudaDataType.CUDA_C_64F,
             qubit_count,
             mat_ptr,
-            cuquantum.cudaDataType.CUDA_C_32F,
+            cuquantum.cudaDataType.CUDA_C_64F,
             cuquantum.custatevec.MatrixLayout.ROW,
             0,
             targets.ctypes.data,
@@ -98,7 +99,7 @@ def evaluate_state_to_vector(
             controls.ctypes.data,
             0,
             len(controls),
-            cuquantum.ComputeType.COMPUTE_32F,
+            cuquantum.ComputeType.COMPUTE_64F,
             workspace_ptr,
             workspaceSize,
         )
