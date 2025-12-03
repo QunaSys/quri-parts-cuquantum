@@ -8,14 +8,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+import random
+import time
+import warnings
 from collections import Counter
 from functools import partial
-from typing import Iterable, Optional, Any, Tuple
+from typing import Any, Iterable, Optional, Tuple
+
 from .transpiler import MultiGPUReorderingTranspiler
-import warnings
-import math
-import time
-import random
 
 try:
     import cupy as cp
@@ -68,12 +69,12 @@ def _update_state(
     n_global_qubits: int = 0,
     transpiler: Optional[CircuitTranspiler] = None,
     precision: Precision = "complex128",
-    device_network_type: Any = None
+    device_network_type: Any = None,
 ) -> list[Tuple[int, int]]:
     if device_network_type is None:
         device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
     qubit_count = circuit.qubit_count
-    gpu_count = 2 ** n_global_qubits
+    gpu_count = 2**n_global_qubits
     n_local_qubits = qubit_count - n_global_qubits
     local_qubits = set(range(n_local_qubits))
 
@@ -92,9 +93,12 @@ def _update_state(
     for i in range(gpu_count):
         with cp.cuda.Device(i):
             for j in range(gpu_count):
-                if i == j: continue
+                if i == j:
+                    continue
                 if cp.cuda.runtime.deviceCanAccessPeer(i, j) != 1:
-                    raise RuntimeError(f"P2P access between device id {i} and {j} is unsupported")
+                    raise RuntimeError(
+                        f"P2P access between device id {i} and {j} is unsupported"
+                    )
                 try:
                     cp.cuda.runtime.deviceEnablePeerAccess(j)
                 except:
@@ -102,10 +106,14 @@ def _update_state(
                     pass
 
     if transpiler is None:
-        transpiler = SequentialTranspiler([
-            ParallelDecomposer([PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]),
-            MultiGPUReorderingTranspiler(n_local_qubits)
-        ])
+        transpiler = SequentialTranspiler(
+            [
+                ParallelDecomposer(
+                    [PauliDecomposeTranspiler(), PauliRotationDecomposeTranspiler()]
+                ),
+                MultiGPUReorderingTranspiler(n_local_qubits),
+            ]
+        )
 
     circuit = transpiler(circuit)
     cached_mat_list = []
@@ -127,8 +135,13 @@ def _update_state(
                         gpu_count,
                         [sv.data.ptr for sv in svs],
                         cuda_d_type,
-                        n_global_qubits, n_local_qubits,
-                        swap_buf, len(swap_buf), [], [], 0,
+                        n_global_qubits,
+                        n_local_qubits,
+                        swap_buf,
+                        len(swap_buf),
+                        [],
+                        [],
+                        0,
                         device_network_type,
                     )
                 swap_buf = []
@@ -160,18 +173,20 @@ def _update_state(
             workspace_sizes = []
             for i in range(gpu_count):
                 with cp.cuda.Device(i):
-                    workspace_sizes.append(cuquantum.custatevec.apply_matrix_get_workspace_size(
-                        handles[i],
-                        cuda_d_type,
-                        n_local_qubits,
-                        cached_mat_list[i].data.ptr,
-                        cuda_d_type,
-                        cuquantum.custatevec.MatrixLayout.ROW,
-                        0,
-                        len(targets),
-                        len(controls),
-                        cuda_c_type,
-                    ))
+                    workspace_sizes.append(
+                        cuquantum.custatevec.apply_matrix_get_workspace_size(
+                            handles[i],
+                            cuda_d_type,
+                            n_local_qubits,
+                            cached_mat_list[i].data.ptr,
+                            cuda_d_type,
+                            cuquantum.custatevec.MatrixLayout.ROW,
+                            0,
+                            len(targets),
+                            len(controls),
+                            cuda_c_type,
+                        )
+                    )
 
             # allocate external workspace
             workspaces = []
@@ -205,7 +220,9 @@ def _update_state(
                     )
         else:
             if g.name != "SWAP":
-                raise RuntimeError(f"Cannot apply gate {g.name} between qubits {all_qubits}")
+                raise RuntimeError(
+                    f"Cannot apply gate {g.name} between qubits {all_qubits}"
+                )
             swap_buf.append(tuple(g.target_indices))
 
     # if swap_buf:
@@ -229,7 +246,7 @@ def _sample(
     precision: Precision = "complex128",
     seed: int = 0,
     n_global_qubits: int = 0,
-    device_network_type = None,
+    device_network_type=None,
     transpiler: Optional[CircuitTranspiler] = None,
 ) -> MeasurementCounts:
     if cp is None:
@@ -251,13 +268,13 @@ def _sample(
 
     qubit_count = circuit.qubit_count
     assert qubit_count >= n_global_qubits
-    gpu_count = 2 ** n_global_qubits
+    gpu_count = 2**n_global_qubits
     existing_gpu_count = cp.cuda.runtime.getDeviceCount()
 
     if gpu_count > existing_gpu_count:
         raise RuntimeError(
-            f"Cannot proceed quantum simulation with {n_global_qubits=}.\n" +
-            "Required GPUs: {gpu_count}, Existing GPUs: {existing_gpu_count}"
+            f"Cannot proceed quantum simulation with {n_global_qubits=}.\n"
+            + "Required GPUs: {gpu_count}, Existing GPUs: {existing_gpu_count}"
         )
 
     n_local_qubits = qubit_count - n_global_qubits
@@ -273,7 +290,15 @@ def _sample(
             svs.append(cp.zeros(2**n_local_qubits, dtype=precision))
     cp.put(svs[0], [0], [1.0])
 
-    swap_buf = _update_state(svs, handles, circuit, n_global_qubits, transpiler, precision, device_network_type)
+    swap_buf = _update_state(
+        svs,
+        handles,
+        circuit,
+        n_global_qubits,
+        transpiler,
+        precision,
+        device_network_type,
+    )
 
     for i in range(gpu_count):
         cp.cuda.Device(i).synchronize()
@@ -305,7 +330,10 @@ def _sample(
     for i in range(gpu_count):
         with cp.cuda.Device(i):
             cuquantum.custatevec.sampler_preprocess(
-                handles[i], samplers[i], sampler_workspaces[i].ptr, sampler_workspace_sizes[i]
+                handles[i],
+                samplers[i],
+                sampler_workspaces[i].ptr,
+                sampler_workspace_sizes[i],
             )
 
     # calculate norms
@@ -313,9 +341,11 @@ def _sample(
         sv_norms = []
         for i in range(gpu_count):
             with cp.cuda.Device(i) as dev:
-                sv_norms.append(cuquantum.custatevec.sampler_get_squared_norm(
-                    handles[i], samplers[i]
-                ))
+                sv_norms.append(
+                    cuquantum.custatevec.sampler_get_squared_norm(
+                        handles[i], samplers[i]
+                    )
+                )
                 dev.synchronize()
         norm = sum(sv_norms)
     else:
@@ -360,7 +390,7 @@ def _sample(
         cp.cuda.Device(i).synchronize()
 
     result = Counter()
-    global_qubit_shift = 2 ** n_local_qubits
+    global_qubit_shift = 2**n_local_qubits
     shot_offset = 0
     for i in range(gpu_count):
         global_qubits = i * global_qubit_shift
@@ -379,11 +409,11 @@ def _sample(
 
 
 def create_cuquantum_vector_sampler(
-        precision: Precision = "complex128",
-        seed: int = 0,
-        n_global_qubits: int = 0,
-        device_network_type = None,
-        transpiler: Optional[CircuitTranspiler] = None,
+    precision: Precision = "complex128",
+    seed: int = 0,
+    n_global_qubits: int = 0,
+    device_network_type=None,
+    transpiler: Optional[CircuitTranspiler] = None,
 ) -> Sampler:
     return partial(
         _sample,
@@ -396,7 +426,9 @@ def create_cuquantum_vector_sampler(
 
 
 def create_cuquantum_vector_concurrent_sampler(
-    precision: Precision = "complex128", seed: int = 0, n_global_qubits: int = 0,
+    precision: Precision = "complex128",
+    seed: int = 0,
+    n_global_qubits: int = 0,
 ) -> ConcurrentSampler:
     sampler = create_cuquantum_vector_sampler(precision, seed, n_global_qubits)
 

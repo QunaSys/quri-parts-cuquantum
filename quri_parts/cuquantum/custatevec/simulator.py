@@ -19,7 +19,6 @@ try:
 except ImportError:
     cuquantum = None
 import numpy as np
-
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 
 from . import PRECISIONS, Precision
