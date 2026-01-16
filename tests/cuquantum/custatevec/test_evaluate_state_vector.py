@@ -8,7 +8,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from quri_parts.core import QuantumCircuit, quantum_state
+from quri_parts.circuit import QuantumCircuit
+from quri_parts.core.state import quantum_state
 
 from quri_parts.cuquantum.custatevec.simulator import evaluate_state_to_vector
 
