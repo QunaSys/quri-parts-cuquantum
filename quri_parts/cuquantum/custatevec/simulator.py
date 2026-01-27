@@ -43,20 +43,20 @@ def evaluate_state_to_vector(
 
     sv = cp.array(sv)
 
-    handle = cuquantum.custatevec.create()
+    handle = cuquantum.bindings.custatevec.create()
     for g in state.circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
         mat = cp.array(gate_array(g))
         mat_ptr = mat.data.ptr
 
-        workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
+        workspaceSize = cuquantum.bindings.custatevec.apply_matrix_get_workspace_size(
             handle,
             cuquantum.cudaDataType.CUDA_C_32F,
             qubit_count,
             mat_ptr,
             cuquantum.cudaDataType.CUDA_C_32F,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            cuquantum.bindings.custatevec.MatrixLayout.ROW,
             0,
             len(targets),
             len(controls),
@@ -71,14 +71,14 @@ def evaluate_state_to_vector(
             workspace_ptr = 0
 
         # apply gate
-        cuquantum.custatevec.apply_matrix(
+        cuquantum.bindings.custatevec.apply_matrix(
             handle,
             sv.data.ptr,  # type: ignore
             cuquantum.cudaDataType.CUDA_C_32F,
             qubit_count,
             mat_ptr,
             cuquantum.cudaDataType.CUDA_C_32F,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            cuquantum.bindings.custatevec.MatrixLayout.ROW,
             0,
             targets.ctypes.data,
             len(targets),
@@ -90,6 +90,6 @@ def evaluate_state_to_vector(
             workspaceSize,
         )
 
-    cuquantum.custatevec.destroy(handle)
+    cuquantum.bindings.custatevec.destroy(handle)
 
     return QuantumStateVector(qubit_count, vector=cp.asnumpy(sv))

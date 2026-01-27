@@ -67,7 +67,7 @@ def _update_state(
     device_network_type: Any = None
 ) -> list[Tuple[int, int]]:
     if device_network_type is None:
-        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
+        device_network_type = cuquantum.bindings.custatevec.DeviceNetworkType.SWITCH
     qubit_count = circuit.qubit_count
     gpu_count = 2 ** n_global_qubits
     n_local_qubits = qubit_count - n_global_qubits
@@ -117,7 +117,7 @@ def _update_state(
             # apply global swap gates
             if swap_buf:
                 with cp.cuda.Device(0):
-                    cuquantum.custatevec.multi_device_swap_index_bits(
+                    cuquantum.bindings.custatevec.multi_device_swap_index_bits(
                         handles,
                         gpu_count,
                         [sv.data.ptr for sv in svs],
@@ -148,13 +148,13 @@ def _update_state(
             workspace_sizes = []
             for i in range(gpu_count):
                 with cp.cuda.Device(i):
-                    workspace_sizes.append(cuquantum.custatevec.apply_matrix_get_workspace_size(
+                    workspace_sizes.append(cuquantum.bindings.custatevec.apply_matrix_get_workspace_size(
                         handles[i],
                         cuda_d_type,
                         n_local_qubits,
                         cached_mat_list[i].data.ptr,
                         cuda_d_type,
-                        cuquantum.custatevec.MatrixLayout.ROW,
+                        cuquantum.bindings.custatevec.MatrixLayout.ROW,
                         0,
                         len(targets),
                         len(controls),
@@ -173,14 +173,14 @@ def _update_state(
             # apply gate
             for i in range(gpu_count):
                 with cp.cuda.Device(i):
-                    cuquantum.custatevec.apply_matrix(
+                    cuquantum.bindings.custatevec.apply_matrix(
                         handles[i],
                         svs[i].data.ptr,  # type: ignore
                         cuda_d_type,
                         n_local_qubits,
                         cached_mat_list[i].data.ptr,
                         cuda_d_type,
-                        cuquantum.custatevec.MatrixLayout.ROW,
+                        cuquantum.bindings.custatevec.MatrixLayout.ROW,
                         0,
                         targets.ctypes.data,
                         len(targets),
@@ -198,7 +198,7 @@ def _update_state(
 
     # if swap_buf:
     #     with cp.cuda.Device(0):
-    #         cuquantum.custatevec.multi_device_swap_index_bits(
+    #         cuquantum.bindings.custatevec.multi_device_swap_index_bits(
     #             handles,
     #             gpu_count,
     #             [sv.data.ptr for sv in svs],
@@ -225,7 +225,7 @@ def _sample(
     if cuquantum is None:
         raise RuntimeError("cuQuantum is not installed.")
     if device_network_type is None:
-        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
+        device_network_type = cuquantum.bindings.custatevec.DeviceNetworkType.SWITCH
 
     if precision not in PRECISIONS:
         raise ValueError(f"Invalid precision: {precision}")
@@ -253,7 +253,7 @@ def _sample(
     handles = []
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            handles.append(cuquantum.custatevec.create())
+            handles.append(cuquantum.bindings.custatevec.create())
 
     svs = []
     for i in range(gpu_count):
@@ -277,7 +277,7 @@ def _sample(
     sampler_workspace_sizes = []
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            sampler, sampler_workspace_size = cuquantum.custatevec.sampler_create(
+            sampler, sampler_workspace_size = cuquantum.bindings.custatevec.sampler_create(
                 handles[i], svs[i].data.ptr, cuda_d_type, n_local_qubits, shots
             )
             samplers.append(sampler)
@@ -292,7 +292,7 @@ def _sample(
     # sample preprocess
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            cuquantum.custatevec.sampler_preprocess(
+            cuquantum.bindings.custatevec.sampler_preprocess(
                 handles[i], samplers[i], sampler_workspaces[i].ptr, sampler_workspace_sizes[i]
             )
 
@@ -301,7 +301,7 @@ def _sample(
         sv_norms = []
         for i in range(gpu_count):
             with cp.cuda.Device(i) as dev:
-                sv_norms.append(cuquantum.custatevec.sampler_get_squared_norm(
+                sv_norms.append(cuquantum.bindings.custatevec.sampler_get_squared_norm(
                     handles[i], samplers[i]
                 ))
                 dev.synchronize()
@@ -314,7 +314,7 @@ def _sample(
     # for i in range(gpu_count):
     #     if sv_norms[i] > 0.0:
     #         with cp.cuda.Device(i):
-    #             cuquantum.custatevec.sampler_apply_sub_sv_offset(
+    #             cuquantum.bindings.custatevec.sampler_apply_sub_sv_offset(
     #                 handles[i],
     #                 samplers[i],
     #                 i,
@@ -333,7 +333,7 @@ def _sample(
             continue
         shot_offset = sum(shot_counts[:i])
         with cp.cuda.Device(i):
-            cuquantum.custatevec.sampler_sample(
+            cuquantum.bindings.custatevec.sampler_sample(
                 handles[i],
                 samplers[i],
                 res_bits.ctypes.data + shot_offset * res_bits.dtype.itemsize,
@@ -341,7 +341,7 @@ def _sample(
                 n_local_qubits,
                 rand_nums.ctypes.data + shot_offset * rand_nums.dtype.itemsize,
                 shot_counts[i],
-                cuquantum.custatevec.SamplerOutput.RANDNUM_ORDER,
+                cuquantum.bindings.custatevec.SamplerOutput.RANDNUM_ORDER,
             )
 
     for i in range(gpu_count):
@@ -360,8 +360,8 @@ def _sample(
     # destroy sampler and handle
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            cuquantum.custatevec.sampler_destroy(samplers[i])
-            cuquantum.custatevec.destroy(handles[i])
+            cuquantum.bindings.custatevec.sampler_destroy(samplers[i])
+            cuquantum.bindings.custatevec.destroy(handles[i])
 
     return result
 
