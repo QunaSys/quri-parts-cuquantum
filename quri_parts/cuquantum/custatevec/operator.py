@@ -17,7 +17,7 @@ except ImportError:
     cp = None
 
 try:
-    from cuquantum import custatevec as cusv
+    from cuquantum import bindings.custatevec as cusv
 except ImportError:
     cusv = None
 
