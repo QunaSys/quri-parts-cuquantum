@@ -17,10 +17,17 @@ try:
     import cupy as cp
 except ImportError:
     cp = None
+
 try:
     import cuquantum
-except ImportError:
+    try:
+        import cuquantum.bindings as cqbindings
+    except ImportError
+        cqbindings = cuquantum
+except ImportError
     cuquantum = None
+    cqbindings = None
+
 import numpy as np
 from quri_parts.circuit.transpile import (
     CircuitTranspiler,

@@ -18,11 +18,12 @@ try:
     import cuquantum
     try:
         import cuquantum.bindings as cqbindings
-    except ImportError
+    except ImportError:
         cqbindings = cuquantum
 except ImportError:
     cuquantum = None
     cqbindings = None
+    
 import numpy as np
 
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector

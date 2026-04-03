@@ -19,9 +19,6 @@ except ImportError:
 try:
     from cuquantum.bindings import custatevec as cusv
 except ImportError:
-    try:
-        import cuquantum.custatevec as cusv
-    except ImportError:
         cusv = None
 
 from quri_parts.core.operator import PAULI_IDENTITY, Operator, PauliLabel

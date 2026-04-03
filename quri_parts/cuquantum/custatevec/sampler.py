@@ -29,7 +29,7 @@ try:
         import cuquantum.bindings as cqbindings
     except ImportError:
         cqbindings = cuquantum
-except ImportErrror:
+except ImportError:
     cuquantum = None
     cqbindings = None
 
@@ -76,7 +76,7 @@ def _update_state(
     device_network_type: Any = None
 ) -> list[Tuple[int, int]]:
     if device_network_type is None:
-        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
+        device_network_type = cqbindings.custatevec.DeviceNetworkType.SWITCH
     qubit_count = circuit.qubit_count
     gpu_count = 2 ** n_global_qubits
     n_local_qubits = qubit_count - n_global_qubits
@@ -126,7 +126,7 @@ def _update_state(
             # apply global swap gates
             if swap_buf:
                 with cp.cuda.Device(0):
-                    cuquantum.custatevec.multi_device_swap_index_bits(
+                    cqbindings.custatevec.multi_device_swap_index_bits(
                         handles,
                         gpu_count,
                         [sv.data.ptr for sv in svs],
@@ -323,7 +323,7 @@ def _sample(
     # for i in range(gpu_count):
     #     if sv_norms[i] > 0.0:
     #         with cp.cuda.Device(i):
-    #             cqbindings.custateve.sampler_apply_sub_sv_offset(
+    #             cqbindings.custatevec.sampler_apply_sub_sv_offset(
     #                 handles[i],
     #                 samplers[i],
     #                 i,
