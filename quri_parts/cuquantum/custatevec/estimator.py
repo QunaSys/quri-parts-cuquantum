@@ -17,10 +17,17 @@ try:
     import cupy as cp
 except ImportError:
     cp = None
+
 try:
     import cuquantum
-except ImportError:
+    try:
+        import cuquantum.bindings as cqbindings
+    except ImportError
+        cqbindings = cuquantum
+except ImportError
     cuquantum = None
+    cqbindings = None
+
 import numpy as np
 from quri_parts.circuit.transpile import (
     CircuitTranspiler,
@@ -77,7 +84,7 @@ def _estimate(
     transpiler: Optional[CircuitTranspiler] = None,
 ) -> Estimate[complex]:
     if device_network_type is None:
-        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
+        device_network_type = cqbindings.custatevec.DeviceNetworkType.SWITCH
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
     if cuquantum is None:
@@ -114,7 +121,7 @@ def _estimate(
     handles = []
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            handles.append(cuquantum.custatevec.create())
+            handles.append(cqbindings.custatevec.create())
 
     phys_to_virt_map = list(range(qubit_count))
 
@@ -156,7 +163,7 @@ def _estimate(
             for i in range(gpu_count):
                 cp.cuda.Device(i).synchronize()
             with cp.cuda.Device(0):
-                cuquantum.custatevec.multi_device_swap_index_bits(
+                cqbindings.custatevec.multi_device_swap_index_bits(
                     handles,
                     gpu_count,
                     [sv.data.ptr for sv in svs],
@@ -177,7 +184,7 @@ def _estimate(
         # apply Pauli operator
         for i in range(gpu_count):
             with cp.cuda.Device(i):
-                cuquantum.custatevec.compute_expectations_on_pauli_basis(
+                cqbindings.custatevec.compute_expectations_on_pauli_basis(
                     handles[i],
                     svs[i].data.ptr,  # type: ignore
                     cuda_d_type,
@@ -193,7 +200,7 @@ def _estimate(
     for i in range(gpu_count):
         with cp.cuda.Device(i) as dev:
             dev.synchronize()
-            cuquantum.custatevec.destroy(handles[i])
+            cqbindings.custatevec.destroy(handles[i])
 
     exp_value = 0.0
     for i in range(len(paulis)):

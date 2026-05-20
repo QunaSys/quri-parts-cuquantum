@@ -16,8 +16,14 @@ except ImportError:
     cp = None
 try:
     import cuquantum
+    try:
+        import cuquantum.bindings as cqbindings
+    except ImportError:
+        cqbindings = cuquantum
 except ImportError:
     cuquantum = None
+    cqbindings = None
+    
 import numpy as np
 
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
@@ -43,20 +49,20 @@ def evaluate_state_to_vector(
 
     sv = cp.array(sv)
 
-    handle = cuquantum.custatevec.create()
+    handle = cqbindings.custatevec.create()
     for g in state.circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
         mat = cp.array(gate_array(g))
         mat_ptr = mat.data.ptr
 
-        workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
+        workspaceSize = cqbindings.custatevec.apply_matrix_get_workspace_size(
             handle,
             cuquantum.cudaDataType.CUDA_C_32F,
             qubit_count,
             mat_ptr,
             cuquantum.cudaDataType.CUDA_C_32F,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            cqbindings.custatevec.MatrixLayout.ROW,
             0,
             len(targets),
             len(controls),
@@ -71,14 +77,14 @@ def evaluate_state_to_vector(
             workspace_ptr = 0
 
         # apply gate
-        cuquantum.custatevec.apply_matrix(
+        cqbindings.custatevec.apply_matrix(
             handle,
             sv.data.ptr,  # type: ignore
             cuquantum.cudaDataType.CUDA_C_32F,
             qubit_count,
             mat_ptr,
             cuquantum.cudaDataType.CUDA_C_32F,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            cqbindings.custatevec.MatrixLayout.ROW,
             0,
             targets.ctypes.data,
             len(targets),
@@ -90,6 +96,6 @@ def evaluate_state_to_vector(
             workspaceSize,
         )
 
-    cuquantum.custatevec.destroy(handle)
+    cqbindings.custatevec.destroy(handle)
 
     return QuantumStateVector(qubit_count, vector=cp.asnumpy(sv))

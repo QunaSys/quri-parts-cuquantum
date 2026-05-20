@@ -17,9 +17,9 @@ except ImportError:
     cp = None
 
 try:
-    from cuquantum import custatevec as cusv
+    from cuquantum.bindings import custatevec as cusv
 except ImportError:
-    cusv = None
+        cusv = None
 
 from quri_parts.core.operator import PAULI_IDENTITY, Operator, PauliLabel
 
