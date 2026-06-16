@@ -1,7 +1,13 @@
-from quri_parts.circuit.transpile import CircuitTranspilerProtocol
-from quri_parts.circuit import ImmutableQuantumCircuit, QuantumGate, SWAP, QuantumCircuit
-from typing import Tuple, Iterable
 from itertools import chain
+from typing import Iterable, Tuple
+
+from quri_parts.circuit import (
+    SWAP,
+    ImmutableQuantumCircuit,
+    QuantumCircuit,
+    QuantumGate,
+)
+from quri_parts.circuit.transpile import CircuitTranspilerProtocol
 
 
 def _greedy_tiling(
@@ -79,15 +85,14 @@ def _make_swaps_from_map(phys_map: list[int]) -> list[Tuple[int, int]]:
                 family.remove(grp_j)
                 grp_i.extend(grp_j)
                 grp_i.sort()
-    return sum([
-        [(grp[i - 1], grp[i]) for i in range(1, len(grp))]
-        for grp in family
-    ], [])
+    return sum(
+        [[(grp[i - 1], grp[i]) for i in range(1, len(grp))] for grp in family], []
+    )
 
 
 class MultiGPUReorderingTranspiler(CircuitTranspilerProtocol):
-    """
-    Reorder and insert SWAP gates, to be executed efficiently in multi-GPU environments.
+    """Reorder and insert SWAP gates, to be executed efficiently in multi-GPU
+    environments.
 
     [^1]: Y. Teranishi et al., Lazy Qubit Reordering for Accelerating Parallel
          State-Vector-based Quantum Circuit Simulation, arXiv: 2410.04252
@@ -106,7 +111,7 @@ class MultiGPUReorderingTranspiler(CircuitTranspilerProtocol):
 
     _n_local_qubits: int
     _n_internal_qubits: int
-    
+
     def __init__(self, n_local_qubits: int, n_internal_qubits: int = 0):
         self._n_local_qubits = n_local_qubits
         self._n_internal_qubits = n_internal_qubits
@@ -118,13 +123,18 @@ class MultiGPUReorderingTranspiler(CircuitTranspilerProtocol):
         circuit = QuantumCircuit(n_qubits)
         i = 0
         while len(gates) > 0:
-            virt_locals, tile, gates = _greedy_tiling(gates, n_qubits, self._n_local_qubits)
+            virt_locals, tile, gates = _greedy_tiling(
+                gates, n_qubits, self._n_local_qubits
+            )
             if len(tile) == 0:
                 raise RuntimeError("Cannot place gates in local qubits")
             gates = list(gates)
             phys_map, swap_gates = _mapping(phys_map, virt_locals, self._n_local_qubits)
             circuit.extend(swap_gates)
-            virt_to_phys = [[j for j, e in enumerate(phys_map) if e == i][0] for i in range(n_qubits)]
+            virt_to_phys = [
+                [j for j, e in enumerate(phys_map) if e == i][0]
+                for i in range(n_qubits)
+            ]
             circuit.extend([_map_qubits(virt_to_phys, g) for g in tile])
         circuit.extend([SWAP(i, j) for i, j in _make_swaps_from_map(phys_map)])
         return circuit.freeze()

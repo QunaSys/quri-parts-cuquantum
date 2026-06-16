@@ -8,10 +8,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal
+from quri_parts.circuit import QuantumCircuit
+from quri_parts.core.state import quantum_state
 
-from typing_extensions import TypeAlias
+from quri_parts.cuquantum.custatevec.simulator import evaluate_state_to_vector
 
-Precision: TypeAlias = Literal["complex64", "complex128"]
 
-PRECISIONS: set[Precision] = {"complex64", "complex128"}
+def test_evaluate_state_vector():
+    circuit = QuantumCircuit(4)
+    circuit.add_H_gate(3)
+    state = quantum_state(4)
+
+    state = state.with_gates_applied(circuit)
+
+    state = evaluate_state_to_vector(state)
+    assert abs(1.0 - sum([(c * c.conjugate()).real for c in state.vector])) < 1e-5

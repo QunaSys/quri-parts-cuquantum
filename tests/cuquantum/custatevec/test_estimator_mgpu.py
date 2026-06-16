@@ -8,19 +8,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-
-from quri_parts.circuit import QuantumCircuit, QuantumGate
-from quri_parts.cuquantum.custatevec.estimator import (
-    create_cuquantum_vector_estimator,
-)
-from quri_parts.core.operator import Operator, pauli_label
-from quri_parts.stim.estimator import create_stim_clifford_estimator
-from quri_parts.core.state import GeneralCircuitQuantumState
-import numpy as np
-import random
-import math
 import cmath
+import math
+import random
+
+import numpy as np
+import pytest
+from quri_parts.circuit import QuantumCircuit, QuantumGate
+from quri_parts.core.operator import Operator, pauli_label
+from quri_parts.core.state import GeneralCircuitQuantumState
+from quri_parts.stim.estimator import create_stim_clifford_estimator
+
+from quri_parts.cuquantum.custatevec.estimator import create_cuquantum_vector_estimator
 
 
 def make_circuit(qubits: int) -> QuantumCircuit:
@@ -56,9 +55,7 @@ def test_general_estimator(qubits: int, global_qubits: int, axis: str) -> None:
     estimator = create_cuquantum_vector_estimator(n_global_qubits=global_qubits)
     label = " ".join([f"{axis}{i}" for i in range(6)])
     state = GeneralCircuitQuantumState(qubits, circuit)
-    operator = Operator({
-        pauli_label(label): 1.0
-    })
+    operator = Operator({pauli_label(label): 1.0})
     estimate = estimator(operator, state)
     assert math.isclose(1.0, estimate.value.real)
     assert math.isclose(0.0, estimate.value.imag)
@@ -67,7 +64,9 @@ def test_general_estimator(qubits: int, global_qubits: int, axis: str) -> None:
 @pytest.mark.parametrize("qubits", [12])
 @pytest.mark.parametrize("gates", [2])
 @pytest.mark.parametrize("global_qubits", [0, 1, 2, 3])
-def test_estimator_with_random_circuit(qubits: int, gates: int, global_qubits: int) -> None:
+def test_estimator_with_random_circuit(
+    qubits: int, gates: int, global_qubits: int
+) -> None:
     q = random.sample(range(qubits), 4)
     operator = operator = Operator(
         {

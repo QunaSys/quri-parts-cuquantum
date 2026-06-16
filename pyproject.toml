@@ -34,7 +34,7 @@ quri-parts-stim = "<1.0.0"
 quri-parts-qulacs = "<1.0.0"
 docformatter = "^1.4,!=1.6.0"
 pytest = ">=7.0.1,<9.0.0"
-qulacsvis = "0.7.3"
+qulacsvis = { version = "0.7.3", python = ">=3.9.8,<3.12" }
 
 [tool.poetry.group.doc.dependencies]
 Sphinx = ">=4.4,<8.0"
