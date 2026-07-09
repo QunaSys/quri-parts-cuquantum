@@ -17,10 +17,6 @@ try:
     import cupy as cp
 except ImportError:
     cp = None
-try:
-    import cuquantum
-except ImportError:
-    cuquantum = None
 import numpy as np
 from quri_parts.circuit import QuantumCircuit
 from quri_parts.circuit.transpile import (
@@ -48,6 +44,7 @@ from quri_parts.core.state import (
 )
 
 from . import PRECISIONS, Precision
+from ._compat import cuquantum, custatevec
 from .circuit import gate_array, gate_map
 from .operator import convert_operator
 from .sampler import _update_state
@@ -81,7 +78,7 @@ def _estimate(
     transpiler: Optional[CircuitTranspiler] = None,
 ) -> Estimate[complex]:
     if device_network_type is None:
-        device_network_type = cuquantum.custatevec.DeviceNetworkType.SWITCH
+        device_network_type = custatevec.DeviceNetworkType.SWITCH
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
     if cuquantum is None:
@@ -123,7 +120,7 @@ def _estimate(
     handles = []
     for i in range(gpu_count):
         with cp.cuda.Device(i):
-            handles.append(cuquantum.custatevec.create())
+            handles.append(custatevec.create())
 
     phys_to_virt_map = list(range(qubit_count))
 
@@ -176,7 +173,7 @@ def _estimate(
             for i in range(gpu_count):
                 cp.cuda.Device(i).synchronize()
             with cp.cuda.Device(0):
-                cuquantum.custatevec.multi_device_swap_index_bits(
+                custatevec.multi_device_swap_index_bits(
                     handles,
                     gpu_count,
                     [sv.data.ptr for sv in svs],
@@ -205,7 +202,7 @@ def _estimate(
         # apply Pauli operator
         for i in range(gpu_count):
             with cp.cuda.Device(i):
-                cuquantum.custatevec.compute_expectations_on_pauli_basis(
+                custatevec.compute_expectations_on_pauli_basis(
                     handles[i],
                     svs[i].data.ptr,  # type: ignore
                     cuda_d_type,
@@ -222,7 +219,7 @@ def _estimate(
     for i in range(gpu_count):
         with cp.cuda.Device(i) as dev:
             dev.synchronize()
-            cuquantum.custatevec.destroy(handles[i])
+            custatevec.destroy(handles[i])
 
     exp_value = 0.0
     for i in range(len(paulis)):
