@@ -20,12 +20,14 @@ location is available at runtime, so callers can simply do::
     custatevec.create()  # works on both old and new SDKs
 """
 try:
-    import cuquantum  # type: ignore
+    import cuquantum
 
     try:
-        from cuquantum.bindings import custatevec  # type: ignore  # SDK 25.03+
+        from cuquantum.bindings import custatevec  # SDK 25.03+
     except ImportError:
-        from cuquantum import custatevec  # type: ignore  # pre-25.03
+        from cuquantum import custatevec  # pre-25.03
 except ImportError:
-    cuquantum = None  # type: ignore
-    custatevec = None  # type: ignore
+    cuquantum = None
+    custatevec = None
+
+__all__ = ["cuquantum", "custatevec"]
