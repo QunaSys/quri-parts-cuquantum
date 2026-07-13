@@ -14,10 +14,6 @@ try:
     import cupy as cp
 except ImportError:
     cp = None
-try:
-    import cuquantum
-except ImportError:
-    cuquantum = None
 import numpy as np
 from quri_parts.circuit.transpile import (
     ParallelDecomposer,
@@ -27,6 +23,7 @@ from quri_parts.circuit.transpile import (
 from quri_parts.core.state import CircuitQuantumState, QuantumStateVector
 
 from . import PRECISIONS, Precision
+from ._compat import cuquantum, custatevec
 from .circuit import gate_array, gate_map
 
 gates_to_cache = set()
@@ -68,7 +65,7 @@ def evaluate_state_to_vector(
 
     mat_dict = {}
 
-    handle = cuquantum.custatevec.create()
+    handle = custatevec.create()
     for g in circuit.gates:
         targets = np.array(g.target_indices, dtype=np.int32)
         controls = np.array(g.control_indices, dtype=np.int32)
@@ -82,13 +79,13 @@ def evaluate_state_to_vector(
             mat = cp.array(gate_array(g), dtype=precision)
         mat_ptr = mat.data.ptr
 
-        workspaceSize = cuquantum.custatevec.apply_matrix_get_workspace_size(
+        workspaceSize = custatevec.apply_matrix_get_workspace_size(
             handle,
             cuda_d_type,
             qubit_count,
             mat_ptr,
             cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            custatevec.MatrixLayout.ROW,
             0,
             len(targets),
             len(controls),
@@ -103,14 +100,14 @@ def evaluate_state_to_vector(
             workspace_ptr = 0
 
         # apply gate
-        cuquantum.custatevec.apply_matrix(
+        custatevec.apply_matrix(
             handle,
             sv.data.ptr,  # type: ignore
             cuda_d_type,
             qubit_count,
             mat_ptr,
             cuda_d_type,
-            cuquantum.custatevec.MatrixLayout.ROW,
+            custatevec.MatrixLayout.ROW,
             0,
             targets.ctypes.data,
             len(targets),
@@ -122,6 +119,6 @@ def evaluate_state_to_vector(
             workspaceSize,
         )
 
-    cuquantum.custatevec.destroy(handle)
+    custatevec.destroy(handle)
 
     return QuantumStateVector(qubit_count, vector=cp.asnumpy(sv))

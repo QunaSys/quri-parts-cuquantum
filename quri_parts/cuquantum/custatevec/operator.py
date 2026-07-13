@@ -17,12 +17,9 @@ try:
 except ImportError:
     cp = None
 
-try:
-    from cuquantum import custatevec as cusv
-except ImportError:
-    cusv = None
-
 from quri_parts.core.operator import PAULI_IDENTITY, Operator, PauliLabel
+
+from ._compat import custatevec
 
 _OperatorKey: TypeAlias = frozenset[tuple[PauliLabel, complex]]
 _operator_cache: dict[
@@ -39,7 +36,7 @@ def convert_operator(
 
     if cp is None:
         raise RuntimeError("CuPy is not installed.")
-    if cusv is None:
+    if custatevec is None:
         raise RuntimeError("cuQuantum is not installed.")
 
     pauli_coef_tuples: Iterable[tuple[PauliLabel, complex]]
