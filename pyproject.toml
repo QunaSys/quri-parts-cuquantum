@@ -21,7 +21,7 @@ style = "pep440"
 
 
 [tool.poetry.dependencies]
-python = ">=3.9.8,<4"
+python = ">=3.10,<4"
 numpy = ">=1.26.3"
 quri-parts = "<1.0.0"
 
@@ -34,7 +34,7 @@ quri-parts-stim = "<1.0.0"
 quri-parts-qulacs = "<1.0.0"
 docformatter = "^1.4,!=1.6.0"
 pytest = ">=7.0.1,<9.0.0"
-qulacsvis = { version = "0.7.3", python = ">=3.9.8,<3.12" }
+qulacsvis = { version = "0.7.3", python = "<3.12" }
 
 [tool.poetry.group.doc.dependencies]
 Sphinx = ">=4.4,<8.0"
