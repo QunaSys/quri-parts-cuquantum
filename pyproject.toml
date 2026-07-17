@@ -22,7 +22,7 @@ style = "pep440"
 
 [tool.poetry.dependencies]
 python = ">=3.9.8,<4"
-numpy = "^1.26.3"
+numpy = ">=1.26.3"
 quri-parts = "<1.0.0"
 
 [tool.poetry.group.dev.dependencies]
