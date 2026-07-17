@@ -35,7 +35,7 @@ from quri_parts.cuquantum.custatevec.estimator import (
 
 
 def vector(qubit_count: int, bits: int) -> StateVectorType:
-    vector: StateVectorType = np.zeros(2**qubit_count, dtype=np.cfloat)
+    vector: StateVectorType = np.zeros(2**qubit_count, dtype=np.complex128)
     vector[bits] = 1.0
     return vector
 
